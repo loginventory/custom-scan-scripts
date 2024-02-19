@@ -3,21 +3,49 @@
 Diese Dokumentation beschreibt die Verwendung und Funktionen des Skripts, das von der RemoteScanner-Komponente von LOGINventory aufgerufen wird, wenn der Definitionstyp "UniversalAgentInventory" ausgewählt wird. Es ermöglicht die dynamische Erstellung von Inventardatensätzen durch Übergabe von Argumenten durch den RemoteScanner.
 
 ## Standard-Header
+# PowerShell-Skriptvorlage mit Einbindung des allgemeinen Headers
 
-Jedes Skript muss mit dem folgenden Standard-Header beginnen:
+Jedes Skript sollte den folgenden Standard-Header enthalten, der grundlegende Initialisierungen und das Einbinden gemeinsamer Ressourcen wie die `common.ps1`-Bibliothek vornimmt.
+
+## Allgemeiner Skript-Header
 
 ```powershell
-#default header ----------------------------------------------------------------------
+# Default header ----------------------------------------------------------------------
 param (
     [string]$parameter = ""
 )
 
-. (Join-Path -Path $PSScriptRoot -ChildPath "include\common.ps1")
+. (Join-Path -Path $PSScriptRoot -ChildPath "include\\common.ps1")
 
 $scope = Init -encodedParams $parameter
-
-#end of default header ----------------------------------------------------------------------
+# End of default header ----------------------------------------------------------------------
 ```
+
+Dieser Header definiert einen Eingabeparameter, bindet die `common.ps1`-Datei aus dem `include`-Verzeichnis ein und initialisiert das Skript mit der `Init`-Funktion, die in `common.ps1` definiert ist.
+
+## Verwendung im Skript
+
+Nach dem Einbinden des Headers kann man das zurückgegebene `$scope`-Objekt im Skript nutzen, um auf verschiedene konfigurierte Werte und Einstellungen zuzugreifen:
+
+- `Credentials`: Hashtable der Credentials
+- `Parameters`: Hashtable der Parameter
+- `DataDir`: Pfad zum Datenverzeichnis
+- `Version`: LOGINventory Version
+- `TimeStamp`: Zeitstempel im Format `yyyy-MM-dd-HH-mm-ss`, zu verwenden z.B. für Zeitstempel im Dateinamen
+- `TimeStamp2`: Zeitstempel im ISO 8601-Format `yyyy-MM-ddTHH:mm:ss`, zu verwenden z.B. für LastInventory.Timestamp
+
+
+```powershell
+# Zugriff auf Eigenschaften von $scope
+Write-Host "Data Directory: $($scope.DataDir)"
+Write-Host "Version: $($scope.Version)"
+Write-Host "Parameters: $($scope.Parameters)"
+Write-Host "Credentials: $($scope.Credentials)"
+Write-Host "TimeStamp: $($scope.TimeStamp)"
+Write-Host "TimeStamp2: $($scope.TimeStamp2)"
+```
+
+Stelle sicher, dass du den allgemeinen Header in jedes deiner PowerShell-Skripte integrierst, um eine konsistente Initialisierung und Einbindung gemeinsamer Ressourcen zu gewährleisten.
 
 ## Grundlegende Verwendung
 
