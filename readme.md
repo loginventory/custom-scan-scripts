@@ -2,12 +2,8 @@
 
 Diese Dokumentation beschreibt die Verwendung und Funktionen des Skripts, das von der RemoteScanner-Komponente von LOGINventory aufgerufen wird, wenn der Definitionstyp "UniversalAgentInventory" ausgewählt wird. Es ermöglicht die dynamische Erstellung von Inventardatensätzen durch Übergabe von Argumenten durch den RemoteScanner.
 
-## Standard-Header
-# PowerShell-Skriptvorlage mit Einbindung des allgemeinen Headers
-
-Jedes Skript sollte den folgenden Standard-Header enthalten, der grundlegende Initialisierungen und das Einbinden gemeinsamer Ressourcen wie die `common.ps1`-Bibliothek vornimmt.
-
 ## Allgemeiner Skript-Header
+Jedes Skript sollte den folgenden Standard-Header enthalten, der grundlegende Initialisierungen und das Einbinden gemeinsamer Ressourcen wie die `common.ps1`-Bibliothek vornimmt.
 
 ```powershell
 # Default header ----------------------------------------------------------------------
@@ -45,7 +41,7 @@ Write-Host "TimeStamp: $($scope.TimeStamp)"
 Write-Host "TimeStamp2: $($scope.TimeStamp2)"
 ```
 
-Stelle sicher, dass du den allgemeinen Header in jedes deiner PowerShell-Skripte integrierst, um eine konsistente Initialisierung und Einbindung gemeinsamer Ressourcen zu gewährleisten.
+Stellen Sie sicher, dass Sie den allgemeinen Header in jedes der PowerShell-Skripte integrieren, um eine konsistente Initialisierung und Einbindung gemeinsamer Ressourcen zu gewährleisten.
 
 ## Grundlegende Verwendung
 
