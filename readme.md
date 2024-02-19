@@ -2,6 +2,16 @@
 
 Diese Dokumentation beschreibt die Verwendung und Funktionen des Skripts, das von der RemoteScanner-Komponente von LOGINventory aufgerufen wird, wenn der Definitionstyp "UniversalAgentInventory" ausgewählt wird. Es ermöglicht die dynamische Erstellung von Inventardatensätzen durch Übergabe von Argumenten durch den RemoteScanner.
 
+Damit ein Skript im RemoteScanner zur Verfügung steht, muss es sich entweder in 
+
+%processdir%\Resources\Agents (ProcessDir ist das Ausführungsverzeichnis der LOGINquirySvc.exe)
+
+oder in 
+
+%programdata%\LOGIN\LOGINventory\9.0\Agents
+
+befinden.
+
 ## Allgemeiner Skript-Header
 Jedes Skript sollte den folgenden Standard-Header enthalten, der grundlegende Initialisierungen und das Einbinden gemeinsamer Ressourcen wie die `common.ps1`-Bibliothek vornimmt.
 
