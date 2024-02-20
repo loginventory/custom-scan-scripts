@@ -4,11 +4,11 @@ Diese Dokumentation beschreibt die Verwendung und Funktionen des Skripts, das vo
 
 Damit ein Skript im RemoteScanner zur Verfügung steht, muss es sich entweder in 
 
-%processdir%\Resources\Agents (ProcessDir ist das Ausführungsverzeichnis der LOGINquirySvc.exe)
+`%processdir%\Resources\Agents` (ProcessDir ist das Ausführungsverzeichnis der LOGINquirySvc.exe)
 
 oder in 
 
-%programdata%\LOGIN\LOGINventory\9.0\Agents
+`%programdata%\LOGIN\LOGINventory\9.0\Agents`
 
 befinden.
 
