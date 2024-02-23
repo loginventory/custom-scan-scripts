@@ -1,3 +1,24 @@
+<#
+.SYNOPSIS
+Ein Skript zur Erhebung von JetBrains Produktlizenzinformationen über die JetBrains Account API.
+
+.DESCRIPTION
+Dieses Skript ruft Informationen zu JetBrains Produktlizenzen ab, indem es die JetBrains Account API anfragt. Es verwendet dabei API-Schlüssel und Kundeninformationen, um die Lizenzen abzurufen und sie in einer .inv Datei für LOGINventory zu speichern.
+
+.AUTHOR
+Schmidt's LOGIN GmbH - [www.loginventory.de](https://www.loginventory.de) 2024
+
+.VERSION
+1.0.0
+
+.LICENSE
+Dieses Skript ist unter der MIT-Lizenz lizenziert. Vollständige Lizenzinformationen finden Sie unter [https://opensource.org/licenses/MIT](https://opensource.org/licenses/MIT)
+
+.NOTES
+Stellen Sie sicher, dass Sie über gültige JetBrains API-Zugangsdaten verfügen, um dieses Skript erfolgreich auszuführen.
+Diese Zugangsdaten können Sie dann im RemoteScanner in der Skriptbasierten Inventarisierung unter Parameter apiKey und customerCode hinterlegen, oder hier direkt verwenden.
+#>
+
 #default header ----------------------------------------------------------------------
 param (
     [string]$parameter = ""
@@ -29,8 +50,6 @@ function ToValidJson {
     $json = $hashtable | ConvertTo-Json
     return $json
 }
-
-Write-Host "Tenant: $($scope.Parameters["Tenant"])"
 
 Notify -name "Datadir" -itemName "Data Directory" -message $($scope.DataDir) -category "Info" -state "None" -info "hallo"
 

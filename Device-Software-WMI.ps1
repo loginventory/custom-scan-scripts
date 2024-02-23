@@ -1,4 +1,25 @@
-﻿#default header ----------------------------------------------------------------------
+﻿<#
+.SYNOPSIS
+Ein Skript zur Erfassung installierter Softwareinformationen von mehreren Computern über WMI.
+
+.DESCRIPTION
+Dieses Skript verwendet Windows Management Instrumentation (WMI), um Informationen über installierte Software von angegebenen Computern abzurufen. Es erstellt eine .inv Datei für jedes gescannte System, die Informationen wie Softwarename und Version enthält. Das Skript kann für lokale oder Remote-Computer verwendet werden, wobei optionale Anmeldeinformationen für den Zugriff auf Remote-Systeme bereitgestellt werden können.
+
+.AUTHOR
+Schmidt's LOGIN GmbH - [www.loginventory.de](https://www.loginventory.de) 2024
+
+.VERSION
+1.0.0
+
+.LICENSE
+Dieses Skript ist unter der MIT-Lizenz lizenziert. Vollständige Lizenzinformationen finden Sie unter [https://opensource.org/licenses/MIT](https://opensource.org/licenses/MIT)
+
+.NOTES
+Das Skript setzt eine erfolgreiche Netzwerkverbindung und geeignete WMI-Zugriffsrechte voraus, um die Informationen erfolgreich abzurufen.
+
+#>
+
+#default header ----------------------------------------------------------------------
 param (
     [string]$parameter = ""
 )

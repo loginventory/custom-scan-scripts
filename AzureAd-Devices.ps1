@@ -1,4 +1,26 @@
-﻿#default header ----------------------------------------------------------------------
+﻿<#
+.SYNOPSIS
+Ein Skript zur Erfassung von Azure AD Geräteinformationen über Microsoft Graph.
+
+.DESCRIPTION
+Dieses Skript verwendet Microsoft Graph, um Informationen über Geräte in Azure Active Directory abzurufen. Es stellt eine Verbindung mit Azure AD her, ruft Gerätedetails ab und speichert die gesammelten Informationen in einer .inv Datei. Es ermöglicht die Filterung der Geräte basierend auf dem angegebenen Namen.
+
+.AUTHOR
+Schmidt's LOGIN GmbH - [www.loginventory.de](https://www.loginventory.de)
+
+.VERSION
+1.0.0
+
+.LICENSE
+Dieses Skript ist unter der MIT-Lizenz lizenziert. Vollständige Lizenzinformationen finden Sie unter [https://opensource.org/licenses/MIT](https://opensource.org/licenses/MIT)
+
+.NOTES
+Das Skript erfordert die Installation der Microsoft.Graph PowerShell-Module und entsprechende Azure AD Berechtigungen.
+Diese Zugangsdaten können Sie dann im RemoteScanner in der Skriptbasierten Inventarisierung unter Parameter tenantId, clientId und clientSecret hinterlegen, oder hier direkt verwenden.
+Über den Parameter nameFilter (z.B. name*) können Sie die Geräte filtern, die in die .inv Datei aufgenommen werden sollen.
+#>
+
+#default header ----------------------------------------------------------------------
 param (
     [string]$parameter = ""
 )
