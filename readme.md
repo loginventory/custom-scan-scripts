@@ -2,6 +2,10 @@
 
 Diese Dokumentation beschreibt die Verwendung und Funktionen des Skripts, das von der RemoteScanner-Komponente von LOGINventory aufgerufen wird, wenn der Definitionstyp "Skriptbasierte Inventarisierung" ausgewählt wird. Es ermöglicht die dynamische Erstellung von Inventardatensätzen durch Übergabe von Argumenten durch den RemoteScanner.
 
+Standardmäßig wird Powershell Core "pwsh.exe" zum ausführen der Skripts verwendet. Folglich wird eine Installation von Powershell > 7 benötigt.
+Sie können dieses Verhalten mit dem Parameter "engine" in der Scan-Definition beeinflussen.
+engine | pcs.exe verwendet die LOGINventory eigene Powershell. Sie können dort jedoch auch einen Pfad angeben.
+
 Damit ein Skript im RemoteScanner zur Verfügung steht, muss es sich entweder in 
 
 `%processdir%\Resources\Agents` (ProcessDir ist das Ausführungsverzeichnis der LOGINquirySvc.exe)
