@@ -6,7 +6,6 @@ param (
 . (Join-Path -Path $PSScriptRoot -ChildPath "include\common.ps1")
 
 $scope = Init -encodedParams $parameter
-
 #end of default header ----------------------------------------------------------------------
 
 $filePath = "$($scope.DataDir)\wmisoft$($scope.TimeStamp).inv"
@@ -31,6 +30,7 @@ function Get-SoftwareInfo {
             foreach ($item in $software) {                
                 $i++                
                 AddPropertyValue -name "SoftwarePackage.Name" -value $($item.Name)
+                AddPropertyValue -name "SoftwarePackage.Version" -value $($item.Version)
                 #Notify -name "Package $($item.Name)" -itemName "- $($item.Name)" -message "- $($item.Name)" -category "Info"  -state "None"    
             }
 
@@ -49,39 +49,16 @@ function Get-SoftwareInfo {
 
 $computers = @($env:COMPUTERNAME, "device2") #some source for computer names, eg AD or a file
 
-SetEntityName -name "Device"
-
-if ($scope.Credentials.Count -gt 0) {
-    foreach ($credential in $scope.Credentials) {
-        $username = $credential.Username
-        $pass = Decode -value $credential.Password
-        $securePassword = ConvertTo-SecureString $pass -AsPlainText -Force
-        $c = New-Object System.Management.Automation.PSCredential($username, $securePassword)
-
-        foreach ($computerName in $computers) {
-            try {          
-                NewEntity
-                AddPropertyValue -name "Name" -value "$computerName $date"
-                Get-SoftwareInfo -computerName $computerName -credential $c                
-            }
-            catch {
-                Notify -name "Error $computerName" -itemName $computerName -message $_ -category "Error"  -state "Faulty"
-            }               
-        }        
+foreach ($computerName in $computers) {        
+    try {
+        Write-Host "Getting Software for $computerName"
+        NewEntity -name "Device"
+        AddPropertyValue -name "Name" -value "$computerName $date"
+        Get-SoftwareInfo -computerName $computerName  
     }
-}
-else {
-    foreach ($computerName in $computers) {        
-        try {
-            Write-Host "Getting Software for $computerName"
-            NewEntity
-            AddPropertyValue -name "Name" -value "$computerName $date"
-            Get-SoftwareInfo -computerName $computerName  
-        }
-        catch {
-            Notify -name "Error $computerName" -itemName $computerName -message "$_ - $($_.InvocationInfo.ScriptLineNumber)" -category "Error"  -state "Faulty"
-        }     
-    }    
+    catch {
+        Notify -name "Error $computerName" -itemName $computerName -message "$_ - $($_.InvocationInfo.ScriptLineNumber)" -category "Error"  -state "Faulty"
+    }     
 }
 
 Notify -name "WMI" -itemName "Writing Data $($elements.Count) Elements" -message $filePath -category "Info" -state "None"

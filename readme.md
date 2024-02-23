@@ -1,6 +1,6 @@
-# LOGINventory UniversalAgentInventory Skript-Dokumentation
+# Skriptbasierte Inventarisierung mit LOGINventory
 
-Diese Dokumentation beschreibt die Verwendung und Funktionen des Skripts, das von der RemoteScanner-Komponente von LOGINventory aufgerufen wird, wenn der Definitionstyp "UniversalAgentInventory" ausgewählt wird. Es ermöglicht die dynamische Erstellung von Inventardatensätzen durch Übergabe von Argumenten durch den RemoteScanner.
+Diese Dokumentation beschreibt die Verwendung und Funktionen des Skripts, das von der RemoteScanner-Komponente von LOGINventory aufgerufen wird, wenn der Definitionstyp "Skriptbasierte Inventarisierung" ausgewählt wird. Es ermöglicht die dynamische Erstellung von Inventardatensätzen durch Übergabe von Argumenten durch den RemoteScanner.
 
 Damit ein Skript im RemoteScanner zur Verfügung steht, muss es sich entweder in 
 
@@ -10,7 +10,7 @@ oder in
 
 `%programdata%\LOGIN\LOGINventory\9.0\Agents`
 
-befinden.
+befinden. Akutell werden nur Powershell-Skripte mit der Erweiterungen .ps1 unterstützt.
 
 ## Allgemeiner Skript-Header
 Jedes Skript sollte den folgenden Standard-Header enthalten, der grundlegende Initialisierungen und das Einbinden gemeinsamer Ressourcen wie die `common.ps1`-Bibliothek vornimmt.
@@ -33,8 +33,7 @@ Dieser Header definiert einen Eingabeparameter, bindet die `common.ps1`-Datei au
 
 Nach dem Einbinden des Headers kann man das zurückgegebene `$scope`-Objekt im Skript nutzen, um auf verschiedene konfigurierte Werte und Einstellungen zuzugreifen:
 
-- `Credentials`: Hashtable der Credentials
-- `Parameters`: Hashtable der Parameter
+- `Parameters`: Hashtable der in der Definition hinterlegten Parameter
 - `DataDir`: Pfad zum Datenverzeichnis
 - `Version`: LOGINventory Version
 - `TimeStamp`: Zeitstempel im Format `yyyy-MM-dd-HH-mm-ss`, zu verwenden z.B. für Zeitstempel im Dateinamen
@@ -46,63 +45,44 @@ Nach dem Einbinden des Headers kann man das zurückgegebene `$scope`-Objekt im S
 Write-Host "Data Directory: $($scope.DataDir)"
 Write-Host "Version: $($scope.Version)"
 Write-Host "Parameters: $($scope.Parameters)"
-Write-Host "Credentials: $($scope.Credentials)"
 Write-Host "TimeStamp: $($scope.TimeStamp)"
 Write-Host "TimeStamp2: $($scope.TimeStamp2)"
 ```
 
 Stellen Sie sicher, dass Sie den allgemeinen Header in jedes der PowerShell-Skripte integrieren, um eine konsistente Initialisierung und Einbindung gemeinsamer Ressourcen zu gewährleisten.
 
+
+
 ## Grundlegende Verwendung
-
-1. **SetEntityName**: Bevor neue Entitäten (Einträge) hinzugefügt werden, muss eine Entität mit `SetEntityName` gesetzt werden. Dies definiert den Typ der zu erstellenden Entität.
-2. **NewEntity**: Mit `NewEntity` wird ein neuer Datensatz angelegt. Dieser Schritt folgt direkt nach dem Setzen des Entitätsnamens.
-3. **AddPropertyValue**: Nachdem eine neue Entität erstellt wurde, werden deren Eigenschaften mit `AddPropertyValue` gesetzt. Hiermit werden die spezifischen Daten für die Entität definiert.
-4. **WriteInv**: Schließlich erzeugt `WriteInv` eine LOGINventory `.inv` Datei, die in das Datenverzeichnis (`datadir`) geschrieben wird. Diese Datei enthält die gesammelten Inventardaten.
-5. **Notify**: Mit `Notify` können Nachrichten in den Jobmonitor des RemoteScanners geschrieben werden. Dies ist nützlich für Feedback und Statusupdates während der Ausführung des Skripts.
-
-## Methoden und ihre Parameter
-
-Im Folgenden finden Sie die im Skript verwendeten Methoden und eine Erklärung ihrer Parameter:
-
-### SetEntityName
-
-- `-name`: Legt den Namen der Entität fest, die erstellt werden soll. Dies definiert den Typ der zu erfassenden Daten.
 
 ### NewEntity
 
-Erstellt eine neue Instanz der zuvor mit `SetEntityName` definierten Entität. Diese Methode hat keine Parameter und wird aufgerufen, um den Beginn eines neuen Datensatzes zu signalisieren.
+- `NewEntity -name <EntityName>`: Erstellt eine neue Entität des angegebenen Typs. Kann auch verwendet werden, um während der Skriptausführung zwischen verschiedenen Entitätstypen zu wechseln.
 
 ### AddPropertyValue
 
 Fügt Eigenschaften zur aktuellen Entität hinzu.
 
-- `-name`: Der Name der Eigenschaft, die hinzugefügt werden soll.
-- `-value`: Der Wert der Eigenschaft.
+- `-name <Eigenschaftsname>`: Der Name der Eigenschaft, die hinzugefügt werden soll.
+- `-value <Wert>`: Der Wert der Eigenschaft.
 
 ### WriteInv
 
 Generiert die finale `.inv` Datei, die alle gesammelten Daten enthält.
 
-- `-filePath`: Der Pfad, unter dem die Datei gespeichert werden soll.
-- `-version`: Die Version des Datensatzes oder des Erhebungsprozesses.
+- `-filePath <Pfad>`: Der Pfad, unter dem die Datei gespeichert werden soll.
+- `-version <Version>`: Die Version des Datensatzes oder des Erhebungsprozesses.
 
-### Notify
+### Benachrichtigung
 
-Sendet Nachrichten an den Jobmonitor des RemoteScanners.
+- `Write-Host <Nachricht>`: Kann für einfache Benachrichtigungen verwendet werden.
+- `Notify -message <Nachricht> -category <EventCategory> -state <State>`: Sendet detaillierte Nachrichten an den Jobmonitor des RemoteScanners. Ermöglicht das Übermitteln zusätzlicher Informationen wie Kategorie und Zustand der Nachricht.
 
-- `-name`: Ein eindeutiger Name für den Nachrichtenkontext.
-- `-itemName`: Der Name des betroffenen Elements.
-- `-message`: Die Nachricht, die gesendet werden soll.
-- `-category`: Die Kategorie der Nachricht (`None`, `Verbose`, `Info`, `Warning`, `Error`).
-- `-state`: Der Zustand des Prozesses (`None`, `Canceled`, `Faulty`, `Aborted`, `Finished`, `Calculating`, `Detecting`, `Queued`, `Executing`).
-
-
-## Kategorien und Zustände
-
-Das Skript verwendet bestimmte Kategorien (`EventCategory`) und Zustände (`State`), um den Typ der Nachricht und den Zustand des Prozesses an den Jobmonitor zurückzugenben. Diese Aufrufe sind rein informativ.
+## EventCategory und State
 
 ### EventCategory
+
+Definiert die Art der Nachricht, die gesendet wird:
 
 - `None`: Keine spezifische Kategorie.
 - `Verbose`: Ausführliche Informationen für Debugging-Zwecke.
@@ -111,6 +91,8 @@ Das Skript verwendet bestimmte Kategorien (`EventCategory`) und Zustände (`Stat
 - `Error`: Fehlermeldungen.
 
 ### State
+
+Gibt den Zustand des Prozesses an:
 
 - `None`: Kein spezifischer Zustand.
 - `Canceled`: Der Prozess wurde abgebrochen.
@@ -122,25 +104,10 @@ Das Skript verwendet bestimmte Kategorien (`EventCategory`) und Zustände (`Stat
 - `Queued`: Der Prozess wurde in die Warteschlange eingereiht.
 - `Executing`: Der Prozess wird gerade ausgeführt.
 
-## Erweiterte Nutzung und Skriptbeispiel
-
-Das bereitgestellte Skriptbeispiel demonstriert die praktische Anwendung der oben beschriebenen Methoden. Es umfasst den Datenerhebung und -verarbeitung, sowie die Erstellung und das Schreiben der `.inv` Datei.
-
-### Beispiel
-
-```powershell
-SetEntityName -name "Device"
-...
-NewEntity
-AddPropertyValue -name "Name" -value $entry.DisplayName
-...
-WriteInv -filePath $filePath -version $version
-```
-
 ## Nutzungshinweise
 
-- Stellen Sie sicher, dass `SetEntityName` vor `NewEntity` aufgerufen wird, um den korrekten Entitätstyp zu definieren.
-- Verwenden Sie `AddPropertyValue` umfassend, um alle relevanten Daten für eine Entität festzulegen.
-- Nutzen Sie `Notify` zur Kommunikation mit dem RemoteScanner, insbesondere um den Fortschritt oder Probleme während der Ausführung zu melden.
+- Beginnen Sie die Datenerhebung mit `NewEntity -name <NameDerEntität>`, um den korrekten Entitätstyp zu definieren.
+- Verwenden Sie `AddPropertyValue`, um alle relevanten Daten für eine Entität festzulegen.
+- Nutzen Sie `Write-Host` für einfache Benachrichtigungen oder `Notify` für detailliertere Benachrichtigungen mit zusätzlichen Informationen wie Kategorie und Zustand.
 
-Diese umfassende Dokumentation bietet einen detaillierten Überblick über die Struktur und Funktionsweise des Skripts, einschließlich des erforderlichen Standard-Headers und der verwendeten Methoden, um eine standardisierte Datenerfassung und -verarbeitung in der LOGINventory-Umgebung zu gewährleisten.
+Diese Dokumentation bietet einen Überblick über die Verwendung des Skripts im Kontext von LOGINventory und RemoteScanner. Es ist wichtig, die spezifischen Anforderungen und Strukturen der LOGINventory-Umgebung zu verstehen, um das Skript effektiv einzusetzen.
