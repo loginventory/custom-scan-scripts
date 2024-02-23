@@ -72,7 +72,7 @@ Generiert die finale `.inv` Datei, die alle gesammelten Daten enthält.
 ### Benachrichtigung an den RemoteScanner JobMonitor
 
 - `Write-Host <Nachricht>`: Kann für einfache Benachrichtigungen verwendet werden.
-- `Notify -name <Thema> -itemName <Key> -message <Nachricht> -category <EventCategory> -state <State>`: Sendet detaillierte Nachrichten an den Jobmonitor des RemoteScanners. Ermöglicht das Übermitteln zusätzlicher Informationen wie Kategorie und Zustand der Nachricht. -itemName ist der Key des Events. Werden meherer Events mit gleichem ItemName gesendet, werden diese im JobMonitor überschrieben bzw. akutaliesrt.
+- `Notify -name <Thema> -itemName <Key> -message <Nachricht> -category <EventCategory> -state <State>`: Sendet detaillierte Nachrichten an den Jobmonitor des RemoteScanners. Ermöglicht das Übermitteln zusätzlicher Informationen wie Kategorie und Zustand der Nachricht. -itemName ist der Key des Events. Werden meherer Events mit gleichem ItemName gesendet, werden diese im JobMonitor überschrieben bzw. aktualisiert.
 
 ## EventCategory und State
 
