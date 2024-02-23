@@ -13,7 +13,8 @@ oder in
 befinden. Akutell werden nur Powershell-Skripte mit der Erweiterungen .ps1 unterstützt.
 
 ## Allgemeiner Skript-Header
-Jedes Skript sollte den folgenden Standard-Header enthalten, der grundlegende Initialisierungen und das Einbinden gemeinsamer Ressourcen wie die `common.ps1`-Bibliothek vornimmt.
+
+Dieser Header definiert einen Eingabeparameter, bindet die `common.ps1`-Datei aus dem `include`-Verzeichnis ein und initialisiert das Skript mit der `Init`-Funktion, die in `common.ps1` definiert ist. Stellen Sie sicher, dass Sie den allgemeinen Header in jedes der PowerShell-Skripte integrieren, um eine konsistente Initialisierung und Einbindung gemeinsamer Ressourcen zu gewährleisten.
 
 ```powershell
 # Default header ----------------------------------------------------------------------
@@ -27,8 +28,6 @@ $scope = Init -encodedParams $parameter
 # End of default header ----------------------------------------------------------------------
 ```
 
-Dieser Header definiert einen Eingabeparameter, bindet die `common.ps1`-Datei aus dem `include`-Verzeichnis ein und initialisiert das Skript mit der `Init`-Funktion, die in `common.ps1` definiert ist.
-
 ## Verwendung im Skript
 
 Nach dem Einbinden des Headers kann man das zurückgegebene `$scope`-Objekt im Skript nutzen, um auf verschiedene konfigurierte Werte und Einstellungen zuzugreifen:
@@ -41,7 +40,7 @@ Nach dem Einbinden des Headers kann man das zurückgegebene `$scope`-Objekt im S
 
 
 ```powershell
-# Zugriff auf Eigenschaften von $scope
+# Beispiel: Zugriff auf Eigenschaften von $scope
 Write-Host "Data Directory: $($scope.DataDir)"
 Write-Host "Version: $($scope.Version)"
 Write-Host "Parameters: $($scope.Parameters)"
@@ -49,15 +48,12 @@ Write-Host "TimeStamp: $($scope.TimeStamp)"
 Write-Host "TimeStamp2: $($scope.TimeStamp2)"
 ```
 
-Stellen Sie sicher, dass Sie den allgemeinen Header in jedes der PowerShell-Skripte integrieren, um eine konsistente Initialisierung und Einbindung gemeinsamer Ressourcen zu gewährleisten.
-
-
 
 ## Grundlegende Verwendung
 
 ### NewEntity
 
-- `NewEntity -name <EntityName>`: Erstellt eine neue Entität des angegebenen Typs. Kann auch verwendet werden, um während der Skriptausführung zwischen verschiedenen Entitätstypen zu wechseln.
+- `NewEntity -name <EntityName>`: Erstellt eine neue Entität des angegebenen Typs.
 
 ### AddPropertyValue
 
@@ -73,10 +69,10 @@ Generiert die finale `.inv` Datei, die alle gesammelten Daten enthält.
 - `-filePath <Pfad>`: Der Pfad, unter dem die Datei gespeichert werden soll.
 - `-version <Version>`: Die Version des Datensatzes oder des Erhebungsprozesses.
 
-### Benachrichtigung
+### Benachrichtigung an den RemoteScanner JobMonitor
 
 - `Write-Host <Nachricht>`: Kann für einfache Benachrichtigungen verwendet werden.
-- `Notify -message <Nachricht> -category <EventCategory> -state <State>`: Sendet detaillierte Nachrichten an den Jobmonitor des RemoteScanners. Ermöglicht das Übermitteln zusätzlicher Informationen wie Kategorie und Zustand der Nachricht.
+- `Notify -name <Thema> -itemName <Key> -message <Nachricht> -category <EventCategory> -state <State>`: Sendet detaillierte Nachrichten an den Jobmonitor des RemoteScanners. Ermöglicht das Übermitteln zusätzlicher Informationen wie Kategorie und Zustand der Nachricht. -itemName ist der Key des Events. Werden meherer Events mit gleichem ItemName gesendet, werden diese im JobMonitor überschrieben bzw. akutaliesrt.
 
 ## EventCategory und State
 
