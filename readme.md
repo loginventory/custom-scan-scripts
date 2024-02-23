@@ -55,12 +55,35 @@ Write-Host "TimeStamp2: $($scope.TimeStamp2)"
 
 - `NewEntity -name <EntityName>`: Erstellt eine neue Entität des angegebenen Typs.
 
+    ```powershell
+    NewEntity -name "Device"
+    ```
+
 ### AddPropertyValue
 
-Fügt Eigenschaften zur aktuellen Entität hinzu.
+Fügt der aktuellen Entität Eigenschaften hinzu. Jeder Aufruf repräsentiert ein Attribut der Entität mit einem spezifischen Wert.
+Der erste Aufruf von AddPropertyValue wird jeweils als Key für nächstes "Element" verwendet. Das zweite Auftreten von 
+SoftwarePackage.Name sorgt im Beispiel für eine weiteres Software-Paket.
 
 - `-name <Eigenschaftsname>`: Der Name der Eigenschaft, die hinzugefügt werden soll.
 - `-value <Wert>`: Der Wert der Eigenschaft.
+
+    ```powershell
+    AddPropertyValue -name "Name" -value "MyPC"
+    AddPropertyValue -name "SoftwarePackage.Name" -value "MyProgram"
+    AddPropertyValue -name "SoftwarePackage.Version" -value "v1"
+    #neuer Eintrag durch Wiederholung des "Key Properties"
+    AddPropertyValue -name "SoftwarePackage.Name" -value "MyProgram 2"
+    AddPropertyValue -name "SoftwarePackage.Version" -value "v1"
+    ```
+So kann AddProperty einfach in einer Schleife verwendet werden
+
+```powershell
+            foreach ($item in $software) {                          
+                AddPropertyValue -name "SoftwarePackage.Name" -value $($item.Name)
+                AddPropertyValue -name "SoftwarePackage.Version" -value $($item.Version)
+            }
+```
 
 ### WriteInv
 
