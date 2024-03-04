@@ -100,9 +100,9 @@ try {
         AddPropertyValue -name "Kind{Editable:true}" -value "0"
     }
 
-    Notify -name "Writing Data" -itemName "JetApi" -message $filePath -category "Info" -state "None"
+    Notify -name "Writing Data" -itemName "JetApi" -message $filePath -category "Info" -state "Running"
     WriteInv -filePath $filePath -version $scope.Version
-    Notify -name "Writing Data Done" -itemName "JetApi" -message $filePath -category "Info" -state "Finished"
+    Notify -name "Writing Data Done" -itemName "JetApi" -message $filePath -category "Info" -state "Finished" -itemResult "Ok"
 }
 catch {
     Notify -name "JetApi" -itemName "Error" -message "$_ - $($_.InvocationInfo.ScriptLineNumber)" -category "Error"  -state "Faulty"

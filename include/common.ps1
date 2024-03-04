@@ -68,14 +68,16 @@ function Notify() {
         [string]$message,
         [string]$category,
         [string]$state,
-        [string]$info
+        [string]$info,
+        [int]$resultCode,
+        [string]$itemResult
     )
 
     if ([string]::IsNullOrWhiteSpace($name)) {
         $name = $itemName
     }
 
-    Write-Host "ItemEvent: Category: $($category) | Name: $($name) | ItemName: $($itemName) | Message: $($message) | State: $($state) | Info: $($info)"
+    Write-Host "ItemEvent: Category: $($category) | Name: $($name) | ItemName: $($itemName) | Message: $($message) | State: $($state) | Info: $($info) | ResultCode: $($result) | ItemResult: $($itemResult)"
 }
 
 function GetAllPropertyValuesAsString {
