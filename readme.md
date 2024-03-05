@@ -1,10 +1,19 @@
 # Skriptbasierte Inventarisierung mit LOGINventory
 
-Diese Dokumentation beschreibt die Verwendung und Funktionen des Skripts, das von der RemoteScanner-Komponente von LOGINventory aufgerufen wird, wenn der Definitionstyp "Skriptbasierte Inventarisierung" ausgewählt wird. Es ermöglicht die dynamische Erstellung von Inventardatensätzen durch Übergabe von Argumenten durch den RemoteScanner.
+Mit der skriptbasierten Inventarisierung ist es möglich über den LOGINventory Remote Scanner eigene Skripte zur erzeugung dynamischer Inventardatenzätze zu erzeugen. Hierfür steht der Definitionstyp "Skriptbasierte Inventarisierung" zur Verfügung.
+In diesem Definitionstyp können Parameter hinterlegt werden, welche an die Skripte übergeben werden und somit dort zur Verfügung stehen. Ziel ist es eine .inv Datei im Datenverzeichnis zu erzeugen, welche mittels LOGINsert.exe in die LOGINventory Datenbank eingetragen wird.
+Diese .inv Dateien sind XML Dateien, welche ein LOGINventory konformes Schema aufweisen müssen. Um die Handhabung zu vereinfachen, kann in den Skripten eine vereinfachte Syntax -name "Tabellle.Eigenschaft" -value "Wert" verwendet werden (siehe Grundlegende Verwendung). 
 
-Standardmäßig wird Powershell Core "pwsh.exe" zum ausführen der Skripts verwendet. Folglich wird eine Installation von Powershell > 7 benötigt.
-Sie können dieses Verhalten mit dem Parameter "engine" in der Scan-Definition beeinflussen.
-engine | pcs.exe verwendet die LOGINventory eigene Powershell. Sie können dort jedoch auch einen Pfad angeben.
+## Vorraussetzungen
+
+**Powershell**  
+Standardmäßig wird Powershell Core "pwsh.exe" zum ausführen der Skripte verwendet, folglich wird eine Installation von Powershell >= 7 benötigt.
+Powershell Core können Sie von [https://github.com/PowerShell/PowerShell] beziehen.
+Nach der Installation benötigt das System einen Neustart, damit pwsh.exe über PATH gefunden werden kann.
+
+Sie können auch eine andere Skript Engine verwenden indem Sie den Parameter "engine" in der Scan-Definition nutzen.
+engine | pcs.exe verwendet beispielsweise die LOGINventory eigene Powershell, welche auch Zugriff auf LOGINventroy Daten unterstützt unterliegt damit aber den Einschränkungen der Powershell Version 5.
+Sie können dort jedoch auch einen Pfad angeben, z.B. zu einer anderen Powershell Version (exe).
 
 Damit ein Skript im RemoteScanner zur Verfügung steht, muss es sich entweder in 
 
@@ -15,6 +24,10 @@ oder in
 `%programdata%\LOGIN\LOGINventory\9.0\Agents`
 
 befinden. Akutell werden nur Powershell-Skripte mit der Erweiterungen .ps1 unterstützt.
+
+## Skript Umgebung
+
+Die Datei include\common.ps1 enthält Hilfsfunktionen. Sie wird über den Default Header eingebunden. Platzieren Sie diese Datei in Agents\include.
 
 ## Allgemeiner Skript-Header
 
@@ -65,7 +78,7 @@ Write-Host "TimeStamp2: $($scope.TimeStamp2)"
 
 ### AddPropertyValue
 
-Fügt der aktuellen Entität Eigenschaften hinzu. Jeder Aufruf repräsentiert ein Attribut der Entität mit einem spezifischen Wert.
+Fügt der aktuellen Entität Eigenschaften hinzu. Jeder Aufruf repräsentiert eine Eigenschaft der Entität mit einem spezifischen Wert.
 Der erste Aufruf von AddPropertyValue wird jeweils als Key für nächstes "Element" verwendet. Das zweite Auftreten von 
 SoftwarePackage.Name sorgt im Beispiel für eine weiteres Software-Paket.
 
@@ -99,7 +112,7 @@ Generiert die finale `.inv` Datei, die alle gesammelten Daten enthält.
 ### Benachrichtigung an den RemoteScanner JobMonitor
 
 - `Write-Host <Nachricht>`: Kann für einfache Benachrichtigungen verwendet werden.
-- `Notify -name <Thema> -itemName <Key> -message <Nachricht> -category <EventCategory> -state <State>`: Sendet detaillierte Nachrichten an den Jobmonitor des RemoteScanners. Ermöglicht das Übermitteln zusätzlicher Informationen wie Kategorie und Zustand der Nachricht. -itemName ist der Key des Events. Werden meherer Events mit gleichem ItemName gesendet, werden diese im JobMonitor überschrieben bzw. aktualisiert.
+- `Notify -name <Thema> -itemName <Key> -itemResult <ItemResult> -message <Nachricht> -category <EventCategory> -state <State>`: Sendet detaillierte Nachrichten an den Jobmonitor des RemoteScanners. Ermöglicht das Übermitteln zusätzlicher Informationen wie Kategorie und Zustand sowie Ergebnis der Nachricht. -itemName ist der Key des Events. Werden meherer Events mit gleichem ItemName gesendet, werden diese im JobMonitor überschrieben bzw. aktualisiert.
 
 ## EventCategory und State
 
@@ -115,7 +128,7 @@ Definiert die Art der Nachricht, die gesendet wird:
 
 ### State
 
-Gibt den Zustand des Prozesses an:
+Gibt den Zustand des Vorgangs an:
 
 - `None`: Kein spezifischer Zustand.
 - `Canceled`: Der Prozess wurde abgebrochen.
@@ -126,6 +139,16 @@ Gibt den Zustand des Prozesses an:
 - `Detecting`: Der Prozess ist in der Erkennungsphase.
 - `Queued`: Der Prozess wurde in die Warteschlange eingereiht.
 - `Executing`: Der Prozess wird gerade ausgeführt.
+
+### ItemResult
+
+Gibt das Ergebins des Vorgans/Elements an:
+
+- `None`: Keine spezifisches Ergebnis.
+- `Canceled`: Der Vorgang wurde abgebrochen.
+- `Excluded`: Das Element wurde ausgeschlossen.
+- `Error`: Bei dem Vorgang/Element ist ein Fehler aufgetreten.
+- `Ok`: Erfolgreich.
 
 ## Nutzungshinweise
 
