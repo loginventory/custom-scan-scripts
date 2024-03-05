@@ -78,7 +78,7 @@ foreach ($computerName in $computers) {
         Get-SoftwareInfo -computerName $computerName  
     }
     catch {
-        Notify -name "Error $computerName" -itemName $computerName -message "$_ - $($_.InvocationInfo.ScriptLineNumber)" -category "Error"  -state "Faulty"
+        Notify -name "Error $computerName" -itemName $computerName -message "$_ - $($_.InvocationInfo.ScriptLineNumber)" -category "Error"  -state "Faulty" -itemResult "Error"
     }     
 }
 

@@ -53,6 +53,9 @@ Notify -name "Connected" -itemName "MSGRAPH" -message "Ok" -category "Info" -sta
 Notify -name "Getting Devices" -itemName "MSGRAPH" -message "..." -category "Info" -state "None"
 
 $devices = Get-MgDevice -All
+
+$devices | Format-List -Property * | Out-File -FilePath "c:\temp\devices.txt"
+
 Notify -name "Getting Devices Done" -itemName "MSGRAPH" -message "Found $($devices.Count) Devices" -category "Info" -state "None"
     
 try {
@@ -61,11 +64,13 @@ try {
             continue
         }
 
-        Notify -name $device.DisplayName -itemName "MSGRAPH" -message "Device: $($device.DisplayName)" -category "Info"  -state "Finished"          
+        Notify -name $device.DisplayName -itemName "MSGRAPH" -message "Device: $($device.DisplayName) Compliant: $($device.IsCompliant)" -category "Info"  -state "Finished"                  
+
+        $compliantValue = if ($null -eq $device.IsCompliant) { "n/v" } else { $device.IsCompliant }
         
         NewEntity -name "Device"
         AddPropertyValue -name "Name" -value $device.DisplayName
-        
+        AddPropertyValue -name "Custom.Compliant" -value $compliantValue
         AddPropertyValue -name "LastInventory.Timestamp" -value $scope.TimeStamp2
         AddPropertyValue -name "OperatingSystem.Name" -value $($device.OperatingSystem)
         AddPropertyValue -name "OperatingSystem.Version" -value $($device.OperatingSystemVersion)
@@ -80,7 +85,7 @@ try {
     Notify -name "Writing Data Done" -itemName "MSGRAPH" -message $filePath -category "Info" -state "Finished"
 }
 catch {
-    Notify -name "ERROR" -itemName "Error" -message "$_ - $($_.InvocationInfo.ScriptLineNumber)" -category "Error"  -state "Faulty"
+    Notify -name "ERROR" -itemName "Error" -message "$_ - $($_.InvocationInfo.ScriptLineNumber)" -category "Error"  -state "Faulty" -itemResult "Error"
 }
 
 Disconnect-MgGraph

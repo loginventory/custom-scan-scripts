@@ -105,5 +105,5 @@ try {
     Notify -name "Writing Data Done" -itemName "JetApi" -message $filePath -category "Info" -state "Finished" -itemResult "Ok"
 }
 catch {
-    Notify -name "JetApi" -itemName "Error" -message "$_ - $($_.InvocationInfo.ScriptLineNumber)" -category "Error"  -state "Faulty"
+    Notify -name "JetApi" -itemName "Error" -message "$_ - $($_.InvocationInfo.ScriptLineNumber)" -category "Error"  -state "Faulty" -itemResult "Error"
 }
