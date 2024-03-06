@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-Ein Skript zur Erfassung installierter Softwareinformationen von mehreren Computern über WMI.
+Ein Beispiel-Skript zur Erfassung mit WMI, hier z.B. installierter Softwareinformationen von mehreren Computern. 
 
 .DESCRIPTION
 Dieses Skript verwendet Windows Management Instrumentation (WMI), um Informationen über installierte Software von angegebenen Computern abzurufen. Es erstellt eine .inv Datei für jedes gescannte System, die Informationen wie Softwarename und Version enthält. Das Skript kann für lokale oder Remote-Computer verwendet werden, wobei optionale Anmeldeinformationen für den Zugriff auf Remote-Systeme bereitgestellt werden können.

@@ -16,7 +16,11 @@ Dieses Skript ist unter der MIT-Lizenz lizenziert. Vollständige Lizenzinformati
 
 .NOTES
 Stellen Sie sicher, dass Sie über gültige JetBrains API-Zugangsdaten verfügen, um dieses Skript erfolgreich auszuführen.
-Diese Zugangsdaten können Sie dann im RemoteScanner in der Skriptbasierten Inventarisierung unter Parameter apiKey und customerCode hinterlegen, oder hier direkt verwenden.
+
+.PARAMETER
+Diese Zugangsdaten können Sie im RemoteScanner in der Skriptbasierten Inventarisierung unter Parameter, oder hier direkt verwenden.
+- apiKey
+- customerCode
 #>
 
 #default header ----------------------------------------------------------------------
