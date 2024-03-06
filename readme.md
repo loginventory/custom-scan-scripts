@@ -2,14 +2,14 @@
 
 Mit der skriptbasierten Inventarisierung ist es möglich über den LOGINventory Remote Scanner eigene Skripte zur erzeugung dynamischer Inventardatenzätze zu erzeugen. Hierfür steht der Definitionstyp "Skriptbasierte Inventarisierung" zur Verfügung.
 In diesem Definitionstyp können Parameter hinterlegt werden, welche an die Skripte übergeben werden und somit dort zur Verfügung stehen. Ziel ist es eine .inv Datei im Datenverzeichnis zu erzeugen, welche mittels LOGINsert.exe in die LOGINventory Datenbank eingetragen wird.
-Diese .inv Dateien sind XML Dateien, welche ein LOGINventory konformes Schema aufweisen müssen. Um die Handhabung zu vereinfachen, kann in den Skripten eine vereinfachte Syntax -name "Tabellle.Eigenschaft" -value "Wert" verwendet werden (siehe Grundlegende Verwendung). 
+Diese .inv Dateien sind XML Dateien, welche ein LOGINventory konformes Schema aufweisen müssen. Um die Handhabung zu vereinfachen, kann in den Skripten eine vereinfachte Syntax -name "Tabellle.Eigenschaft" -value "Wert" verwendet werden (siehe [Grundlegende Verwendung](#grundlegende-verwendung)). 
 
 ## Vorraussetzungen
 
 **Powershell**  
-Standardmäßig wird Powershell Core "pwsh.exe" zum ausführen der Skripte verwendet, folglich wird eine Installation von Powershell >= 7 benötigt.
+Standardmäßig wird **Powershell Core "pwsh.exe"** zum ausführen der Skripte verwendet, folglich wird eine Installation von Powershell >= 7 benötigt.
 Powershell Core können Sie von [https://github.com/PowerShell/PowerShell] beziehen.
-Nach der Installation benötigt das System einen Neustart, damit pwsh.exe über PATH gefunden werden kann.
+Nach der Installation benötigt das System einen **Neustart**, damit pwsh.exe über PATH gefunden werden kann.
 
 Sie können auch eine andere Skript Engine verwenden indem Sie den Parameter "engine" in der Scan-Definition nutzen.
 engine | pcs.exe verwendet beispielsweise die LOGINventory eigene Powershell, welche auch Zugriff auf LOGINventroy Daten unterstützt unterliegt damit aber den Einschränkungen der Powershell Version 5.
@@ -24,6 +24,12 @@ oder in
 `%programdata%\LOGIN\LOGINventory\9.0\Agents`
 
 befinden. Akutell werden nur Powershell-Skripte mit der Erweiterungen .ps1 unterstützt.
+
+Laden Sie sich hier aus diesem Repository die Skripte herunter, die Sie verwenden möchten oder nutzen Sie selbstgeschriebene Skripte. Positionieren Sie diese in einem der beiden Verzeichnisse und prüfen Sie, dass sich dort auch der Unterordner "include" mit der Datei `common.ps1` befindet!
+
+Jetzt kann im Remote Scanner eine neue Definition vom Typ "Skriptbasierte Inventarisierung" angelegt und das entsprechende File ausgewählt werden.
+
+Fügen Sie in der Definition auf der Seite "Parameter" die vom Skript benötigten Parameter (z.B. API-Key, Client-Secret,...) hinzu und benennen Sie die Parameter so, wie sie auch im Skript verwendet werden!
 
 ## Skript Umgebung
 
