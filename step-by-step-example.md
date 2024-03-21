@@ -31,7 +31,7 @@ Install-Module Microsoft.Graph.Users
 - In unserem Fall benötigen Sie die Zugangsdaten zu Ihrer Azure APP also `tentantId`, `clientId` und `clientSecret`. Optional können Sie hier noch einen Namensfilter angeben.
 - Natürlich steht es Ihnen frei, das Skript zu erweitern und eigene Parameter zu übergeben und auf deren Basis die Inventarisierung zu erweitern bzw. andere Aktion auszuführen (E-Mail senden etc.).
 
-Geben Sie die obligatorischen Schlüssel, Wert Parameter (`tenantId`, `clientId`, `clientSecret`) ein und aktivieren Sie bei `clientSecret` bei Bedarf die *Hidden Checkbox*.
+Geben Sie die obligatorischen Schlüssel, Wert Parameter (`tenantId`, `clientId`, `clientSecret`) ein und aktivieren Sie bei `clientSecret` bei Bedarf die *Passwort Checkbox*.
 
 Schließen Sie den Dialog und starten Sie die neu erstellte Definition.
 
