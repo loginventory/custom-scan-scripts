@@ -3,7 +3,8 @@
 Ein Skript zur Erfassung von Azure AD Geräteinformationen über Microsoft Graph.
 
 .DESCRIPTION
-Dieses Skript verwendet Microsoft Graph, um Informationen über Geräte in Azure Active Directory abzurufen. Es stellt eine Verbindung mit Azure AD her, ruft Gerätedetails ab und speichert die gesammelten Informationen in einer .inv Datei. Es ermöglicht die Filterung der Geräte basierend auf dem angegebenen Namen.
+Dieses Skript verwendet Microsoft Graph, um Informationen über Geräte in Azure Active Directory abzurufen. Es liest unter anderem den Compliant Status der Geräte aus und erzeugt für diesen eine Eigene Eigenschaft (Compliant), welche dann in LOGINventory zur Verfügung steht.
+Die gesammelten Informationen werden zur Weiterverarbeitung für LOGINsert in eine .inv Datei geschrieben.
 
 .AUTHOR
 Schmidt's LOGIN GmbH - [www.loginventory.de](https://www.loginventory.de)
