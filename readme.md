@@ -4,6 +4,8 @@ Mit der skriptbasierten Inventarisierung ist es möglich über den LOGINventory 
 In diesem Definitionstyp können Parameter hinterlegt werden, welche an die Skripte übergeben werden und somit dort zur Verfügung stehen. Ziel ist es eine .inv Datei im Datenverzeichnis zu erzeugen, welche mittels LOGINsert.exe in die LOGINventory Datenbank eingetragen wird.
 Diese .inv Dateien sind XML Dateien, welche ein LOGINventory konformes Schema aufweisen müssen. Um die Handhabung zu vereinfachen, kann in den Skripten eine vereinfachte Syntax -name "Tabellle.Eigenschaft" -value "Wert" verwendet werden (siehe [Grundlegende Verwendung](#grundlegende-verwendung)). 
 
+In [diesem Beispiel](step-by-step-example.md) zeigen wir die **exemplarische Verwendung** der skriptbasierten Inventarisierung zum **Anlegen von Assets in LOGINventory durch die Inventarisierung des Azure-Active-Directory**.
+
 ## Vorraussetzungen
 
 **Powershell**  
