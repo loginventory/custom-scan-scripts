@@ -6,6 +6,8 @@ Diese .inv Dateien sind XML Dateien, welche ein LOGINventory konformes Schema au
 
 In [diesem Beispiel](step-by-step-example.md) zeigen wir die **exemplarische Verwendung** der skriptbasierten Inventarisierung zum **Anlegen von Assets in LOGINventory durch die Inventarisierung des Azure-Active-Directory**.
 
+Bei Pfadangaben gilt: "INSTALLDIR" entspricht Ihrem LOGINventory Installationsverzeichnis. Sollte ein hier erwähntes Verzeichnis lokal noch nicht existieren, erstellen Sie dieses. Diese Struktur wird nicht durch das LOGINventory Setup angelegt.
+
 ## Vorraussetzungen
 
 **Powershell**  
@@ -19,7 +21,7 @@ Sie können dort jedoch auch einen Pfad angeben, z.B. zu einer anderen Powershel
 
 Damit ein Skript im RemoteScanner zur Verfügung steht, muss es sich entweder in 
 
-`%processdir%\Resources\Agents` (ProcessDir ist das Ausführungsverzeichnis der LOGINquirySvc.exe)
+`INSTALLDIR\Resources\Agents`
 
 oder in 
 
