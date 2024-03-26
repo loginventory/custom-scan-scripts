@@ -10,7 +10,7 @@
 2. Starten Sie das System neu.
 3. Aktivieren Sie den LOGINventory Beta-Modus [hier](https://www.loginventory.info/documentation/9/de/technische-details/#aktivieren-des-beta-modus).
 4. Besuchen Sie das [LOGINventory Custom-Scan-Scripts GitHub Repository](https://github.com/loginventory/custom-scan-scripts).
-5. Laden Sie die common.ps1 aus dem `include` Ordner herunter und kopieren Sie diese nach `C:\ProgramData\LOGIN\LOGINventory\9.0\Agents\include`.
+5. Laden Sie die common.ps1 aus dem Repository `include` Ordner herunter und kopieren Sie diese nach `C:\ProgramData\LOGIN\LOGINventory\9.0\Agents\include`.
    Sollte ein hier erwähntes Verzeichnis lokal noch nicht exsistieren, erstellen Sie dieses. Diese Struktur wird nicht durch das LOGINventory Setup angelegt.
 
 ### Vorbereitung für dieses Skript:
