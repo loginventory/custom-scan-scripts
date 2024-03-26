@@ -28,7 +28,7 @@ Install-Module Microsoft.Graph.Users
 #### Parameter:
 
 - Im Skript Header von `AzureAd-Devices-Compliant.ps1` finden Sie unter dem Punkt *Parameter* beschrieben, welche Parameter das Skript entgegen nimmt.
-- In unserem Fall benötigen Sie die Zugangsdaten zu Ihrer Azure App Registration (siehe [Handbuch](https://www.loginventory.info/documentation/9/de/technische-details/#konfigurieren-einer-app-registrierung-bei-microsoft-azure)) also `tentantId`, `clientId` und `clientSecret`. Optional können Sie hier noch einen Namensfilter angeben.
+- In unserem Fall benötigen Sie die Zugangsdaten zu Ihrer Azure App Registration (siehe [Handbuch](https://www.loginventory.info/documentation/9/de/technische-details/#konfigurieren-einer-app-registrierung-bei-microsoft-azure)) also `tenantId`, `clientId` und `clientSecret`. Optional können Sie hier noch einen Namensfilter angeben.
 - Natürlich steht es Ihnen frei, das Skript zu erweitern und eigene Parameter zu übergeben und auf deren Basis die Inventarisierung zu erweitern bzw. andere Aktion auszuführen (E-Mail senden etc.).
 
 Hinterlegen Sie die benötigten Schlüssel-Wert-Paare (`tenantId`, `clientId`, `clientSecret`) ein und aktivieren Sie bei `clientSecret` bei Bedarf die *Passwort Checkbox*.
