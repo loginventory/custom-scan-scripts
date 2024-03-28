@@ -61,6 +61,8 @@ Notify -name "Getting Devices" -itemName "MSGRAPH" -message "..." -category "Inf
 
 $devices = Get-MgDevice -All
 
+#$devices | Format-List -Property * | Out-File -FilePath "c:\temp\devices-and-all-properties.txt"
+
 Notify -name "Getting Devices Done" -itemName "MSGRAPH" -message "Found $($devices.Count) Devices" -category "Info" -state "None"
     
 try {
