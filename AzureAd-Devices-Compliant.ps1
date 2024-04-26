@@ -25,6 +25,8 @@ Diese Zugangsdaten können Sie im RemoteScanner in der Skriptbasierten Inventari
 - clientId
 - clientSecret
 - nameFilter (optional, z.B. mit name* können Sie die Geräte filtern, die in die .inv Datei aufgenommen werden sollen, wobei * ein Wildcard ist.)
+- enabledAccountsOnly (wenn true nur Geräte mit aktivierten Accounts aufnehmen);
+- validCompliantStatesOnly (wenn true nur Geräte mit gültigen Compliance-Status aufnehmen);
 #>
 
 #default header ----------------------------------------------------------------------
@@ -45,6 +47,8 @@ $filePath = "$($scope.DataDir)\azure-$($scope.TimeStamp).inv"
 #Install-Module -Name Microsoft.Graph.Users
 
 $namefilter = $scope.Parameters["namefilter"];
+$enabledAccountsOnly = $scope.Parameters["enabledAccountsOnly"] -eq "true";
+$validCompliantStatesOnly = $scope.Parameters["validCompliantStatesOnly"] -eq "true";
 
 $TenantId = $scope.Parameters["tenantId"]
 $ClientId = $scope.Parameters["clientId"]
@@ -61,13 +65,22 @@ Notify -name "Getting Devices" -itemName "MSGRAPH" -message "..." -category "Inf
 
 $devices = Get-MgDevice -All
 
-#$devices | Format-List -Property * | Out-File -FilePath "c:\temp\devices-and-all-properties.txt"
 
 Notify -name "Getting Devices Done" -itemName "MSGRAPH" -message "Found $($devices.Count) Devices" -category "Info" -state "None"
     
 try {
     foreach ($device in $devices) {                        
         if ($namefilter -and $device.DisplayName -notlike $namefilter) {
+            continue
+        }
+        
+        if ($true -eq $enabledAccountsOnly -and $false -eq $device.AccountEnabled) {
+            Notify -name $device.DisplayName -itemName "MSGRAPH" -message "Dropping Device, Account Not Enabled: $($device.DisplayName) Compliant: $($device.IsCompliant)" -category "Info"  -state "Finished"                   
+            continue
+        }
+        
+        if ($true -eq $validCompliantStatesOnly -and $false -ne $device.IsCompliant -and $true -ne $device.IsCompliant) {
+            Notify -name $device.DisplayName -itemName "MSGRAPH" -message "Dropping Device, no valid compliance state: $($device.DisplayName) Compliant: $($device.IsCompliant)" -category "Info"  -state "Finished"                   
             continue
         }
 
@@ -81,6 +94,23 @@ try {
         AddPropertyValue -name "LastInventory.Timestamp" -value $scope.TimeStamp2
         AddPropertyValue -name "OperatingSystem.Name" -value $($device.OperatingSystem)
         AddPropertyValue -name "OperatingSystem.Version" -value $($device.OperatingSystemVersion)
+                        
+        $owners = Get-MgDeviceRegisteredUser -DeviceId $device.Id
+
+        
+        foreach ($owner in $owners) {
+            $userAdditionalProperties = $owner.AdditionalProperties
+            if ($userAdditionalProperties.ContainsKey("userPrincipalName")) {
+                $UPN = $userAdditionalProperties["userPrincipalName"]                
+                $UserName, $domain = $UPN -split "@"
+                AddPropertyValue -name "DeviceUsage.Domain" -value $($domain)
+                AddPropertyValue -name "DeviceUsage.UserName" -value $($UserName)
+                AddPropertyValue -name "DeviceUsage.Upn" -value $($UPN)
+            }
+            #we can only handle one owner
+            break
+        }        
+
         foreach ($subdevice in $device.SoftwarePackages) {
             AddPropertyValue -name "SoftwarePackage.Name" -value $($subEntry.Name)
             AddPropertyValue -name "SoftwarePackage.Path" -value $($subEntry.Path)
