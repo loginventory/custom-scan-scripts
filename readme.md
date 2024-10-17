@@ -111,6 +111,20 @@ So kann AddProperty einfach in einer Schleife verwendet werden
                 AddPropertyValue -name "SoftwarePackage.Version" -value $($item.Version)
             }
 ```
+**Achtung**: Bei einigen Werten, die im Datenmodell als "Editierbar" gekennzeichnet sind, muss beim `AddPropertyValue`-Befehl das Attribut `{Editable:true}` noch gesondert hinzugefügt werden, z.B.:
+
+```powershell
+AddPropertyValue -name "HardwareProduct.Manufacturer{Editable:true}" -value $_device.manufacturer
+```
+
+Eine vollständige Aufzählung aller betroffenen Werte findet sich in folgender Text-Datei: [EditableProperties.txt](include/EditableProperties.txt)
+
+Falls versucht wird, eine inv-Datei in die Datenbank einzutragen, bei welcher dieses Attribut fehlt, ist folgende Fehlermeldung in der "diag.inv"-Datei ersichtlich:
+
+```powershell
+Login.Ventory.Data.Import.DataHandlerException: Error setting property HardwareProduct.Manufacturer ---&gt; System.InvalidOperationException: Editable properties cannot be implicitly overwritten
+```
+
 
 ### WriteInv
 
