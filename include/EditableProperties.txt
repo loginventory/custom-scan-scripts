@@ -1,0 +1,70 @@
+Die folgenden Eigenschaften sind im LOGINventory-Datenmodell als {Editable:true} gekennzeichnet und müssen daher dieses Attribut bei AddPropertyValue-Befehlen enthalten:
+
+-----------------------
+
+AccessData.Category
+
+InventoryInfo.Comment
+
+AssetModel (HardwareProduct, SoftwareProduct):
+Family
+Manufacturer
+
+AssetModelInfo (HardwareProductInfo, SoftwareProductInfo):
+SKU
+
+HardwareAsset (Device, PeripheralDevice):
+CustomType
+Location
+CostCenter
+Created
+
+Device.FunctionalRole
+
+OperatingSystem.GroupName
+
+SoftwarePackageBase (SoftwarePackage, AppPackage):
+Hidden
+Category
+Comment
+Undesired
+
+Hotfix.Important
+
+SwidTag.Undesired
+
+SoftwareProduct:
+TechnicalContact
+ProfessionalContact
+InventoryNumber
+ProductId
+SoftwareId
+
+Agreement (License, SoftwareLicense, PoolLicense, DeviceLicense, OemLicense, UserLicense, ProductMaintenanceLicense, ProductSubscriptionLicense):
+Number
+Name
+Version
+Manufacturer
+Begin
+End
+FollowUp
+Revision
+Responsible
+Kind
+Type
+
+License (SoftwareLicense, PoolLicense, DeviceLicense, OemLicense, UserLicense, ProductMaintenanceLicense, ProductSubscriptionLicense):
+Amount
+LicenseKey
+Multiplicator
+EffectiveAmount
+Method
+LicenseType
+
+SoftwareLicense (PoolLicense, DeviceLicense, OemLicense, UserLicense):
+UpgradeRight
+DowngradeRight
+PurchasePrice
+
+ProductLicense (ProductMaintenanceLicense, ProductSubscriptionLicense):
+AnnualCosts
