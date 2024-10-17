@@ -8,6 +8,18 @@ In [diesem Beispiel](step-by-step-example.md) zeigen wir die **exemplarische Ver
 
 Bei Pfadangaben gilt: "INSTALLDIR" entspricht Ihrem LOGINventory Installationsverzeichnis. Sollte ein hier erwähntes Verzeichnis lokal noch nicht existieren, erstellen Sie dieses. Diese Struktur wird nicht durch das LOGINventory Setup angelegt.
 
+## Übersicht über verfügbare Skripte
+
+Die folgenden Skripte sind aktuell Teil des Github Repos:
+
+Skript | Beschreibung
+-------|-------------
+[AzureAd-Devices-Compliant.ps1](AzureAd-Devices-Compliant.ps1)|Dieses Skript verwendet Microsoft Graph, um Informationen über Geräte in Microsoft Intune und Azure Active Directory abzurufen. Es liest unter anderem den Compliant Status der Geräte aus und erzeugt für diesen eine Eigene Eigenschaft (Compliant), welche dann in LOGINventory zur Verfügung steht.
+[Device-Software-WMI.ps1](Device-Software-WMI.ps1)|Dieses Skript verwendet Windows Management Instrumentation (WMI), um Informationen über installierte Software von angegebenen Computern abzurufen.
+[csv-user-import.ps1](csv-user-import.ps1)|Dieses Skript öffnet liest aus einer csv-Datei Informationen zu vorhandenen Usern und legt diese in LOGINventory an.
+[jetbrains.ps1](jetbrains.ps1)|Dieses Skript ruft Informationen zu JetBrains Produktlizenzen ab, indem es die vom Softwareherssteller JetBrains die Account API anfragt.
+
+
 ## Vorraussetzungen
 
 **Powershell**  
