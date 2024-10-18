@@ -14,8 +14,9 @@ Die folgenden Skripte sind aktuell Teil des Github Repos:
 
 Skript | Beschreibung
 -------|-------------
-[AzureAd-Devices-Compliant.ps1](AzureAd-Devices-Compliant.ps1)|Dieses Skript verwendet Microsoft Graph, um Informationen über Geräte in Microsoft Intune und Azure Active Directory abzurufen. Es liest unter anderem den Compliant Status der Geräte aus und erzeugt für diesen eine Eigene Eigenschaft (Compliant), welche dann in LOGINventory zur Verfügung steht.
+[AzureAd-Devices-Compliant.ps1](AzureAd-Devices-Compliant.ps1)|Dieses Skript verwendet Microsoft Graph, um Informationen über Geräte aus dem Azure Active Directory abzurufen und diese als Assets in LOGINventory anzulegen. Es liest unter anderem den Compliant Status der Geräte aus und erzeugt für diesen eine Eigene Eigenschaft (Compliant), welche dann in LOGINventory zur Verfügung steht.
 [Device-Software-WMI.ps1](Device-Software-WMI.ps1)|Dieses Skript verwendet Windows Management Instrumentation (WMI), um Informationen über installierte Software von angegebenen Computern abzurufen.
+[IntuneDevices.ps1](IntuneDevices.ps1)|Dieses Skript verwendet Microsoft Graph, um Informationen zu Geräten aus Microsoft Intune abzurufen und diese als Assets in LOGINventory anzulegen.
 [csv-user-import.ps1](csv-user-import.ps1)|Dieses Skript öffnet liest aus einer csv-Datei Informationen zu vorhandenen Usern und legt diese in LOGINventory an.
 [jetbrains.ps1](jetbrains.ps1)|Dieses Skript ruft Informationen zu JetBrains Produktlizenzen ab, indem es die vom Softwareherssteller JetBrains die Account API anfragt.
 
