@@ -1,4 +1,29 @@
 <#
+.SYNOPSIS
+Ein Skript zur Erfassung von Microsoft Intune Geräteinformationen über Microsoft Graph.
+
+.DESCRIPTION
+Dieses Skript verwendet Microsoft Graph, um Informationen über Geräte in Microsoft Intune abzurufen. 
+Die gesammelten Informationen werden zur Weiterverarbeitung für LOGINsert in eine .inv Datei geschrieben.
+
+.AUTHOR
+Tjark-sys
+
+.VERSION
+1.0.0
+
+.LICENSE
+Dieses Skript ist unter der MIT-Lizenz lizenziert. Vollständige Lizenzinformationen finden Sie unter [https://opensource.org/licenses/MIT](https://opensource.org/licenses/MIT)
+
+.NOTES
+Das Skript erfordert die Installation der Microsoft.Graph PowerShell-Module und entsprechende Azure AD Berechtigungen:
+
+Insbesondere muss die verwendete App Registration berechtigt sein, Daten zu den in Intune verwalteten Geräten zu lesen.
+
+Dazu muss bei der App Registration unter "API Permissions" eine neue Permission hinzugefügt und mit "Admin Consent granted" werden. Es handelt sich dabei um die "Microsoft Graph Permission", Subtyp "Application permissions", "DeviceManagementManagedDevices.Read.All".
+
+Ist diese Berechtigung nicht vorhanden, erscheint im Job Monitor ein entsprechender Fehler.
+
 .PARAMETER
 Diese Zugangsdaten können Sie im RemoteScanner in der Skriptbasierten Inventarisierung unter Parameter, oder hier direkt verwenden.
 - tenantId
@@ -62,10 +87,11 @@ foreach($device in $devices) {
     # Speicherplatz des Gerätes
     $totalSpace = ([double]$device.totalStorageSpaceInBytes) / 1048576
     $freeSpace = ([double]$device.freeStorageSpaceInBytes) / 1048576
-    $spacePercantage = ($freeSpace / $totalSpace) *100
-    AddPropertyValue -name "Partitions.TotalSpace" -value $totalSpace
-    AddPropertyValue -name "Partitions.FreeSpace" -value $freeSpace
-    AddPropertyValue -name "Partitions.FreeSpacePC" -value $spacePercantage
+    $spacePercentage = [math]::Round(($freeSpace / $totalSpace) *100)
+    AddPropertyValue -name "Partition.Name" -value "Main Storage"
+    AddPropertyValue -name "Partition.TotalSpace" -value $totalSpace
+    AddPropertyValue -name "Partition.FreeSpace" -value $freeSpace
+    AddPropertyValue -name "Partition.FreeSpacePc" -value $spacePercentage
 
     # Besitzer des Gerätes ermitteln und setzen
     $ownerData = Get-MgUser -UserId $device.userId -Property onPremisesDomainName, onPremisesSamAccountName
@@ -74,7 +100,8 @@ foreach($device in $devices) {
     }
 
     # Mac Adresse des Gerätes
-    AddPropertyValue -name "LastInventory.Mac" -value $device.wiFiMacAddress
+    $fromattedMac = ($device.wiFiMacAddress -replace "..", '$&:').TrimEnd(':').ToUpper()
+    AddPropertyValue -name "LastInventory.Mac" -value $fromattedMac
 
     # IMEI des Gerätes
     AddPropertyValue -name "MobileDeviceInfo.DeviceImei" -value $device.imei
