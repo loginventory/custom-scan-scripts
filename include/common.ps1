@@ -1,4 +1,4 @@
-﻿#reserved variables 
+#reserved variables 
 $lEntities = New-Object System.Collections.ArrayList
 
 function Decode() {
@@ -124,7 +124,8 @@ function ConvertTo-Xml {
             $xmlWriter.WriteStartElement($item.Name, "http://www.loginventory.com/schemas/LOGINventory/data/$loginfoNamespaceVersion/LogInfo")            
 
             $previousKeyPrefix = $null
-
+            $keyProperty = $null;
+            $entitySwitch = $false;
             foreach ($entry in $item.Entries) {
                 $attributePattern = '\{(.+?)\}'
                 $parts = $entry -split '=', 2
@@ -151,13 +152,22 @@ function ConvertTo-Xml {
     
                 $keyPrefix = $keyPath[0]
     
-                if ($keyPrefix -ne $previousKeyPrefix -or ($keyPrefix -eq 'SoftwarePackage' -and $keyPath[1] -eq 'Name')) {
+                if ($keyPrefix -ne $previousKeyPrefix -or ($keyPrefix -eq $previousKeyPrefix -and $keyPath[1] -eq $keyProperty)){ #entity switch
                     if ($previousKeyPrefix) {
                         $xmlWriter.WriteEndElement()
                     }
+                    $entitySwitch = $true
                     $xmlWriter.WriteStartElement($keyPrefix)
                 }
-    
+                else {
+                    $entitySwitch = $false;
+                }
+
+                if($entitySwitch)
+                {
+                    $keyProperty = $keyPath[1]
+                }
+
                 $previousKeyPrefix = $keyPrefix
     
                 if ($keyPath.Count -gt 1) {
@@ -195,74 +205,6 @@ function ConvertTo-Xml {
     }
     return $stringBuilder.ToString()
 }
-
-
-function ConvertTo-Xml2 {
-    param (
-        [Parameter(Mandatory = $true)]
-        $version
-    )
-    $stringWriter = New-Object System.IO.StringWriter
-    $xmlWriter = New-Object System.Xml.XmlTextWriter($stringWriter)
-    $xmlWriter.Formatting = 'Indented'
-
-    $xmlWriter.WriteStartDocument()
-    $xmlWriter.WriteStartElement("root")
-
-    $loginfoNamespaceVersion = ($version -split '\.')[0] + ".0"
-    try {
-        foreach ($entity in $Script:lEntities) {
-            $xmlWriter.WriteStartElement($entity.Name, "http://www.loginventory.com/schemas/LOGINventory/data/$loginfoNamespaceVersion/LogInfo")
-            
-            foreach ($entityEntry in $entity.Entries) {                
-                $firstPropertyName = $null
-                $currentParent = $null
-
-                foreach ($entry in $entityEntry) {
-                    $parts = $entry -split '=', 2
-                    $hierarchy = $parts[0].Trim() -split '\.'
-                    $value = $parts[1].Trim()
-
-                    if ($hierarchy.Length -eq 1) {
-                        #do not encupsulate single properties
-                        $xmlWriter.WriteElementString($hierarchy[0], $value)
-                        continue
-                    }
-
-                    $currentSubentryName = $hierarchy[0]
-                    $propertyName = $hierarchy[-1]
-
-                    if ($propertyName -eq $firstPropertyName -or $currentParent -ne $currentSubentryName) {
-                        if ($currentParent) {
-                            $xmlWriter.WriteEndElement()
-                        }
-                        $firstPropertyName = $propertyName
-                        $xmlWriter.WriteStartElement($currentSubentryName)
-                    }
-
-                    $currentParent = $currentSubentryName
-                    $xmlWriter.WriteElementString($propertyName, $value)
-                }
-
-                if ($currentParent) {
-                    $xmlWriter.WriteEndElement()
-                }
-            }
-            $xmlWriter.WriteEndElement()
-        }
-
-    }
-    catch {
-        Notify -name "ERROR" -itemName "Error" -message "$_ - $($_.InvocationInfo.ScriptLineNumber)" -category "Error"  -state "Faulty"
-    }
-    $xmlWriter.WriteEndElement()
-    $xmlWriter.WriteEndDocument()
-    $xmlWriter.Flush()
-
-    return $stringWriter.ToString()
-}
-
-
 
 function PostProcessXml {
     param(
