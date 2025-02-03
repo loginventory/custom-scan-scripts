@@ -17,6 +17,7 @@ Skript | Beschreibung
 [AzureAd-Devices-Compliant.ps1](AzureAd-Devices-Compliant.ps1)|Dieses Skript verwendet Microsoft Graph, um Informationen über Geräte aus dem Azure Active Directory abzurufen und diese als Assets in LOGINventory anzulegen. Es liest unter anderem den Compliant Status der Geräte aus und erzeugt für diesen eine Eigene Eigenschaft (Compliant), welche dann in LOGINventory zur Verfügung steht.
 [Device-Software-WMI.ps1](Device-Software-WMI.ps1)|Dieses Skript verwendet Windows Management Instrumentation (WMI), um Informationen über installierte Software von angegebenen Computern abzurufen.
 [IntuneDevices.ps1](IntuneDevices.ps1)|Dieses Skript verwendet Microsoft Graph, um Informationen zu Geräten aus Microsoft Intune abzurufen und diese als Assets in LOGINventory anzulegen.
+[AppTec360-MobileDevices.ps1](AppTec360-MobileDevices.ps1)|Dieses Skript verwendet die API von [AppTec360](https://www.apptec360.com/mobile-device-management/), um Informationen zu mobilen Geräten (Smartphones & Tablets) aus dem Mobile Device Management abzurufen und diese als Assets in LOGINventory anzulegen.
 [csv-user-import.ps1](csv-user-import.ps1)|Dieses Skript öffnet liest aus einer csv-Datei Informationen zu vorhandenen Usern und legt diese in LOGINventory an.
 [jetbrains.ps1](jetbrains.ps1)|Dieses Skript ruft Informationen zu JetBrains Produktlizenzen ab, indem es die vom Softwareherssteller JetBrains die Account API anfragt.
 
@@ -40,7 +41,7 @@ oder in
 
 `%programdata%\LOGIN\LOGINventory\9.0\Agents`
 
-befinden. Akutell werden nur Powershell-Skripte mit der Erweiterungen .ps1 unterstützt.
+befinden. Aktuell werden nur Powershell-Skripte mit der Erweiterungen .ps1 unterstützt.
 
 Laden Sie sich hier aus diesem Repository die Skripte herunter, die Sie verwenden möchten oder nutzen Sie selbstgeschriebene Skripte. Positionieren Sie diese in einem der beiden Verzeichnisse und prüfen Sie, dass sich dort auch der Unterordner "include" mit der Datei `common.ps1` befindet!
 
