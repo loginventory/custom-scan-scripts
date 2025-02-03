@@ -44,6 +44,8 @@ befinden. Akutell werden nur Powershell-Skripte mit der Erweiterungen .ps1 unter
 
 Laden Sie sich hier aus diesem Repository die Skripte herunter, die Sie verwenden möchten oder nutzen Sie selbstgeschriebene Skripte. Positionieren Sie diese in einem der beiden Verzeichnisse und prüfen Sie, dass sich dort auch der Unterordner "include" mit der Datei `common.ps1` befindet!
 
+**Falls der Ordner "include" noch nicht existiert, legen Sie diesen an. Die `common.ps1` finden Sie hier zum [Download](include/common.ps1).**
+
 Jetzt kann im Remote Scanner eine neue Definition vom Typ "Skriptbasierte Inventarisierung" angelegt und das entsprechende File ausgewählt werden.
 
 Fügen Sie in der Definition auf der Seite "Parameter" die vom Skript benötigten Parameter (z.B. API-Key, Client-Secret,...) hinzu und benennen Sie die Parameter so, wie sie auch im Skript verwendet werden!
