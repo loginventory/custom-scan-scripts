@@ -69,6 +69,9 @@ foreach($device in $devices) {
     # Namen des Gerätes
     AddPropertyValue -name "Name"  -value $device.deviceName
 
+    # Reaktivieren eines archivierten Geräts
+    AddPropertyValue -name "Archived" -value ""
+
     # Seriennummer des Gerätes
     AddPropertyValue -name "SerialNumber" -value $device.serialNumber
 

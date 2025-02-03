@@ -90,6 +90,8 @@ try {
         
         NewEntity -name "Device"
         AddPropertyValue -name "Name" -value $device.DisplayName
+        # Reactive archived assets
+        AddPropertyValue -name "Archived" -value ""
         AddPropertyValue -name "Custom.Compliant" -value $compliantValue
         AddPropertyValue -name "LastInventory.Timestamp" -value $scope.TimeStamp2
         AddPropertyValue -name "OperatingSystem.Name" -value $($device.OperatingSystem)
