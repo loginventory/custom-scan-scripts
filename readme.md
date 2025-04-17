@@ -14,7 +14,7 @@ Die folgenden Skripte sind aktuell Teil des Github Repos:
 
 Skript | Beschreibung
 -------|-------------
-[Adobe-Cloud-Subscription.ps1](Adobe-Cloud-Subscription.ps1)|Dieses Skript verwendet die Adobe User Management API, um Informationen zu Adobe Cloud Lizenzen abzurufen und diese in LOGINventory anzulegen.
+[Adobe-Cloud-Subscriptions.ps1](Adobe-Cloud-Subscriptions.ps1)|Dieses Skript verwendet die Adobe User Management API, um Informationen zu Adobe Cloud Lizenzen abzurufen und diese in LOGINventory anzulegen.
 [AzureAd-Devices-Compliant.ps1](AzureAd-Devices-Compliant.ps1)|Dieses Skript verwendet Microsoft Graph, um Informationen über Geräte aus dem Azure Active Directory abzurufen und diese als Assets in LOGINventory anzulegen. Es liest unter anderem den Compliant Status der Geräte aus und erzeugt für diesen eine Eigene Eigenschaft (Compliant), welche dann in LOGINventory zur Verfügung steht.
 [AppTec360-MobileDevices.ps1](AppTec360-MobileDevices.ps1)|Dieses Skript verwendet die API von [AppTec360](https://www.apptec360.com/mobile-device-management/), um Informationen zu mobilen Geräten (Smartphones & Tablets) aus dem Mobile Device Management abzurufen und diese als Assets in LOGINventory anzulegen.
 [csv-user-import.ps1](csv-user-import.ps1)|Dieses Skript öffnet liest aus einer csv-Datei Informationen zu vorhandenen Usern und legt diese in LOGINventory an.
