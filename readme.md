@@ -13,7 +13,7 @@ Bei Pfadangaben gilt: "INSTALLDIR" entspricht Ihrem LOGINventory Installationsve
 Die folgenden Skripte sind aktuell Teil des Github Repos:
 
 Skript | Beschreibung | Was wird in LOGINventory erzeugt?
--------|-------------
+-------|-------------|-------------
 [Adobe-Cloud-Subscriptions.ps1](Adobe-Cloud-Subscriptions.ps1)|Dieses Skript verwendet die [Adobe User Management API](https://adobe-apiplatform.github.io/umapi-documentation/en/), um Informationen zu Adobe Cloud Lizenzen abzurufen und diese in LOGINventory anzulegen. | Cloud-Subscriptions und Lizenzen
 [AzureAd-Devices-Compliant.ps1](AzureAd-Devices-Compliant.ps1)|Dieses Skript verwendet Microsoft Graph, um Informationen über Geräte aus dem Azure Active Directory abzurufen und diese als Assets in LOGINventory anzulegen. Es liest unter anderem den Compliant Status der Geräte aus und erzeugt für diesen eine Eigene Eigenschaft (Compliant), welche dann in LOGINventory zur Verfügung steht. | Assets & Eigene Eigenschaften
 [AppTec360-MobileDevices.ps1](AppTec360-MobileDevices.ps1)|Dieses Skript verwendet die API von [AppTec360](https://www.apptec360.com/mobile-device-management/), um Informationen zu mobilen Geräten (Smartphones & Tablets) aus dem Mobile Device Management abzurufen und diese als Assets in LOGINventory anzulegen. | Assets zu mobilen Geräten
