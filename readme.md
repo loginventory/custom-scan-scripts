@@ -12,15 +12,16 @@ Bei Pfadangaben gilt: "INSTALLDIR" entspricht Ihrem LOGINventory Installationsve
 
 Die folgenden Skripte sind aktuell Teil des Github Repos:
 
-Skript | Beschreibung
+Skript | Beschreibung | Was wird in LOGINventory erzeugt?
 -------|-------------
-[Adobe-Cloud-Subscriptions.ps1](Adobe-Cloud-Subscriptions.ps1)|Dieses Skript verwendet die Adobe User Management API, um Informationen zu Adobe Cloud Lizenzen abzurufen und diese in LOGINventory anzulegen.
-[AzureAd-Devices-Compliant.ps1](AzureAd-Devices-Compliant.ps1)|Dieses Skript verwendet Microsoft Graph, um Informationen über Geräte aus dem Azure Active Directory abzurufen und diese als Assets in LOGINventory anzulegen. Es liest unter anderem den Compliant Status der Geräte aus und erzeugt für diesen eine Eigene Eigenschaft (Compliant), welche dann in LOGINventory zur Verfügung steht.
-[AppTec360-MobileDevices.ps1](AppTec360-MobileDevices.ps1)|Dieses Skript verwendet die API von [AppTec360](https://www.apptec360.com/mobile-device-management/), um Informationen zu mobilen Geräten (Smartphones & Tablets) aus dem Mobile Device Management abzurufen und diese als Assets in LOGINventory anzulegen.
-[csv-user-import.ps1](csv-user-import.ps1)|Dieses Skript öffnet liest aus einer csv-Datei Informationen zu vorhandenen Usern und legt diese in LOGINventory an.
-[Device-Software-WMI.ps1](Device-Software-WMI.ps1)|Dieses Skript verwendet Windows Management Instrumentation (WMI), um Informationen über installierte Software von angegebenen Computern abzurufen.
-[IntuneDevices.ps1](IntuneDevices.ps1)|Dieses Skript verwendet Microsoft Graph, um Informationen zu mobilen Geräten (Smartphones & Tablets) und anderen Geräten aus Microsoft Intune abzurufen und diese als Assets in LOGINventory anzulegen.
-[jetbrains.ps1](jetbrains.ps1)|Dieses Skript ruft Informationen zu JetBrains Produktlizenzen ab, indem es die vom Softwareherssteller JetBrains die Account API anfragt.
+[Adobe-Cloud-Subscriptions.ps1](Adobe-Cloud-Subscriptions.ps1)|Dieses Skript verwendet die [Adobe User Management API](https://adobe-apiplatform.github.io/umapi-documentation/en/), um Informationen zu Adobe Cloud Lizenzen abzurufen und diese in LOGINventory anzulegen. | Cloud-Subscriptions und Lizenzen
+[AzureAd-Devices-Compliant.ps1](AzureAd-Devices-Compliant.ps1)|Dieses Skript verwendet Microsoft Graph, um Informationen über Geräte aus dem Azure Active Directory abzurufen und diese als Assets in LOGINventory anzulegen. Es liest unter anderem den Compliant Status der Geräte aus und erzeugt für diesen eine Eigene Eigenschaft (Compliant), welche dann in LOGINventory zur Verfügung steht. | Assets & Eigene Eigenschaften
+[AppTec360-MobileDevices.ps1](AppTec360-MobileDevices.ps1)|Dieses Skript verwendet die API von [AppTec360](https://www.apptec360.com/mobile-device-management/), um Informationen zu mobilen Geräten (Smartphones & Tablets) aus dem Mobile Device Management abzurufen und diese als Assets in LOGINventory anzulegen. | Assets zu mobilen Geräten
+[baramundi-MobileDevices.ps1](baramundi-mobileDevices.ps1)|Dieses Skript verwendet die bConnect API von [baramundi](https://www.baramundi.com/), um Informationen zu mobilen Geräten (Smartphones & Tablets) aus dem Mobile Device Management abzurufen und diese als Assets in LOGINventory anzulegen. | Assets zu mobilen Geräten
+[csv-user-import.ps1](csv-user-import.ps1)|Dieses Skript öffnet liest aus einer csv-Datei Informationen zu vorhandenen Usern und legt diese in LOGINventory an. | UserAccounts und User
+[Device-Software-WMI.ps1](Device-Software-WMI.ps1)|Dieses Skript verwendet Windows Management Instrumentation (WMI), um Informationen über installierte Software von angegebenen Computern abzurufen. | Assets und Software-Pakete
+[IntuneDevices.ps1](IntuneDevices.ps1)|Dieses Skript verwendet Microsoft Graph, um Informationen zu mobilen Geräten (Smartphones & Tablets) und anderen Geräten aus Microsoft Intune abzurufen und diese als Assets in LOGINventory anzulegen. | Assets zu mobilen Geräten
+[jetbrains.ps1](jetbrains.ps1)|Dieses Skript ruft Informationen zu [JetBrains](https://www.jetbrains.com/) Produktlizenzen ab, indem es die vom Softwareherssteller JetBrains die Account API anfragt. | Cloud-Subscriptions und Lizenzen
 
 
 ## Vorraussetzungen
