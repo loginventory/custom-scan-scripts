@@ -4,13 +4,13 @@ Ein Skript zur Erfassung von Microsoft Intune Geräteinformationen über Microso
 
 .DESCRIPTION
 Dieses Skript verwendet Microsoft Graph, um Informationen über Geräte in Microsoft Intune abzurufen. 
-Die gesammelten Informationen werden zur Weiterverarbeitung für LOGINsert in eine .inv Datei geschrieben.
+Die gesammelten Informationen werden zur Weiterverarbeitung durch den Data Service in eine .inv Datei geschrieben.
 
-.AUTHOR
-Tjark-sys
+.AUTHORS
+Tjark-sys & LOGINVENTORY Team
 
 .VERSION
-1.0.0
+2.0.0
 
 .LICENSE
 Dieses Skript ist unter der MIT-Lizenz lizenziert. Vollständige Lizenzinformationen finden Sie unter [https://opensource.org/licenses/MIT](https://opensource.org/licenses/MIT)
@@ -29,6 +29,8 @@ Diese Zugangsdaten können Sie im RemoteScanner in der Skriptbasierten Inventari
 - tenantId
 - clientId
 - clientSecret
+- scanOnlyMobileDevices    Optionaler Parameter, der angibt, ob nur mobile Geräte (iOS und Android) gescannt werden sollen. Standardmäßig werden alle Geräte gescannt. Mögliche Ausprägungen: "true" oder "false".
+
 #>
 
 #default header ----------------------------------------------------------------------
@@ -41,87 +43,126 @@ $scope = Init -encodedParams $parameter
 #end of default header ----------------------------------------------------------------------
 
 
-# Variablen für Authentifizierung
+# Variables for authentication
 $tenantId = $scope.Parameters["tenantId"]  # Azure AD Tenant ID
-$clientId = $scope.Parameters["clientId"]  # Azure AD App Registrierungs Client ID
-$clientSecret = $scope.Parameters["clientSecret"]  # Azure AD App Registrierungs Client Secret
+$clientId = $scope.Parameters["clientId"]  # Azure AD App Registration Client ID
+$clientSecret = $scope.Parameters["clientSecret"]  # Azure AD App Registration Client Secret
+$scanOnlyMobileDevices = $scope.Parameters["scanOnlyMobileDevices"] # Boolean to determine if only mobile devices should be scanned (optional)
 
-# Wandel das ClientSecret in einen SecureString um
+# Convert the ClientSecret to a SecureString
 $clientSecretSecurePass = ConvertTo-SecureString -String $clientSecret -AsPlainText -Force
 
-# Erstelle Anmeldeinformationen
+# Create credentials
 $clientSecretCredential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $clientId, $clientSecretSecurePass
 
-# Verbinden mit MgGraph
+# Connect to MgGraph
 Connect-MgGraph -ClientSecretCredential $clientSecretCredential -TenantId $tenantId -NoWelcome
 
-# Hole Intune Geräteinformationen (managed devices)
-$devices = Get-MgDeviceManagementManagedDevice -All | Select-Object deviceName, model, manufacturer, operatingSystem, osVersion, userId, imei, wiFiMacAddress, phoneNumber, serialNumber, totalStorageSpaceInBytes, freeStorageSpaceInBytes, enrolledDateTime
+# Retrieve Intune device information (managed devices)
+$devices = Get-MgDeviceManagementManagedDevice -All | Select-Object deviceName, model, manufacturer, operatingSystem, osVersion, userId, imei, wiFiMacAddress, phoneNumber, serialNumber, totalStorageSpaceInBytes, freeStorageSpaceInBytes, enrolledDateTime, DeviceCategoryDisplayName, ManagedDeviceName, SubscriberCarrier
 
-# Ausgabe der Anzahl an gefundenen Geräten an den Job Monitor
-Notify -name "Information" -itemName "Auswertung" -itemResult "None" -message "Es wurden $($devices.Count) Assets gefunden" -category "Info" -state "Detecting"
+$numberOfMobileDevices = $devices | Where-Object { $_.operatingSystem -in @("iOS", "Android") } | Measure-Object | Select-Object -ExpandProperty Count
 
-# Einsetzen der Daten
+$message = "Found $($devices.Count) devices in Intune, of which $numberOfMobileDevices are mobile devices."
+
+if ($scanOnlyMobileDevices -eq "true") {
+    $message = "Found $numberOfMobileDevices mobile devices in Intune."
+}
+
+# Output the number of devices found to the Job Monitor
+Notify -name "Information" -itemName "Evaluation" -itemResult "None" -message $message -category "Info" -state "Detecting"
+
+# Process the data
 foreach($device in $devices) {
-    # Neues Gerät Erzeugen
+
+    # Set ChassisType to "Mobile" for iOS and Android, leave empty for other devices as unknown
+    # Use normal DeviceName for PCs, ManagedDeviceName for mobile devices: For smartphones, DeviceName is often "iPhone", which is not unique
+    $chassisType = ""
+    $name = $device.deviceName
+    if ($device.operatingSystem -in @("iOS", "Android")) {
+        $chassisType = "Mobile"
+        $name = $device.ManagedDeviceName
+    }
+
+    # Skip non-mobile devices if "scanOnlyMobileDevices" is true
+    if ($scanOnlyMobileDevices -eq "true" -and $chassisType -ne "Mobile") {
+        continue
+    }
+
+    # Create a new device
     NewEntity -name "Device"
 
-    # Namen des Gerätes
-    AddPropertyValue -name "Name"  -value $device.deviceName
-
-    # Reaktivieren eines archivierten Geräts
+    # Device name
+    AddPropertyValue -name "Name"  -value $name
+    
+    # Reactivate archived assets
     AddPropertyValue -name "Archived" -value ""
 
-    # Seriennummer des Gerätes
+    # Device serial number
     AddPropertyValue -name "SerialNumber" -value $device.serialNumber
 
-    # Art des Gerätes
-    AddPropertyValue -name "DeviceInfo.ChassisType" -value "Mobile"
+    # Device type
+    AddPropertyValue -name "DeviceInfo.ChassisType" -value $chassisType
 
-    # Modell und Herstellers des Gerätes
+    # Device model and manufacturer
     AddPropertyValue -name "HardwareProduct.Manufacturer{Editable:true}" -value $device.manufacturer
     AddPropertyValue -name "HardwareProduct.Name" -value $device.model
 
-    # Betriebssystem, Version und Installationsdatum des Gerätes
+    # Device operating system, version, and installation date
     AddPropertyValue -name "OperatingSystem.Name" -value $device.operatingSystem
     AddPropertyValue -name "OperatingSystem.Version" -value $device.osVersion
     AddPropertyValue -name "OperatingSystem.InstallDate" -value $device.enrolledDateTime
 
-    # Speicherplatz des Gerätes
-    $totalSpace = ([double]$device.totalStorageSpaceInBytes) / 1048576
-    $freeSpace = ([double]$device.freeStorageSpaceInBytes) / 1048576
-    $spacePercentage = [math]::Round(($freeSpace / $totalSpace) *100)
-    AddPropertyValue -name "Partition.Name" -value "Main Storage"
-    AddPropertyValue -name "Partition.TotalSpace" -value $totalSpace
-    AddPropertyValue -name "Partition.FreeSpace" -value $freeSpace
-    AddPropertyValue -name "Partition.FreeSpacePc" -value $spacePercentage
-
-    # Besitzer des Gerätes ermitteln und setzen
-    $ownerData = Get-MgUser -UserId $device.userId -Property onPremisesDomainName, onPremisesSamAccountName
-    if(($ownerData.onPremisesDomainName -ne $null) -and ($ownerData.onPremisesSamAccountName -ne $null)) {
-        AddPropertyValue -name "Owner.Name" -value "$($ownerData.onPremisesDomainName)\$($ownerData.onPremisesSamAccountName)"
+    # Device storage space (only for mobile devices)
+    if($chassisType -eq "Mobile") {        
+        $totalSpace = ([double]$device.totalStorageSpaceInBytes) / 1048576
+        $freeSpace = ([double]$device.freeStorageSpaceInBytes) / 1048576
+        $spacePercentage = [math]::Round(($freeSpace / $totalSpace) *100)
+        AddPropertyValue -name "Partition.Name" -value "Main Storage"
+        AddPropertyValue -name "Partition.TotalSpace" -value $totalSpace
+        AddPropertyValue -name "Partition.FreeSpace" -value $freeSpace
+        AddPropertyValue -name "Partition.FreeSpacePc" -value $spacePercentage
     }
 
-    # Mac Adresse des Gerätes
+    # Determine and set the owner of the device
+    if ($device.userId -ne $null -and $device.userId -ne "") {
+        # Ignore errors if the user no longer exists in Azure AD
+        $ownerData = Get-MgUser -UserId $device.userId -Property onPremisesDomainName, onPremisesSamAccountName -ErrorAction SilentlyContinue
+        if (($ownerData.onPremisesDomainName -ne $null) -and ($ownerData.onPremisesSamAccountName -ne $null)) {
+            AddPropertyValue -name "Owner.Name" -value "$($ownerData.onPremisesDomainName)\$($ownerData.onPremisesSamAccountName)"
+        }
+    }
+
+    # Device MAC address
     $fromattedMac = ($device.wiFiMacAddress -replace "..", '$&:').TrimEnd(':').ToUpper()
     AddPropertyValue -name "LastInventory.Mac" -value $fromattedMac
 
-    # IMEI des Gerätes
+    # Device IMEI
     AddPropertyValue -name "MobileDeviceInfo.DeviceImei" -value $device.imei
 
-    # Telefonnummer des Gerätes
+    # Device phone number
     AddPropertyValue -name "MobileDeviceInfo.PhoneNumber" -value $device.phoneNumber
 
-    # Dateinamen und Dateipfad definieren
-    $fileName = "$($scope.TimeStamp)@$($device.deviceName -replace '[\\/:*?"<>|]', '').inv"
-    $filePath = "$($scope.DataDir)\$fileName"
+    # Device mobile carrier
+    AddPropertyValue -name "MobileDeviceInfo.MobileOperator" -value $device.SubscriberCarrier
 
-    # LOGINventory Job Monitor Benachrichtigen
-    Notify -name "Schreibe Daten..." -itemName "Inventarisierung" -message $device.deviceName -category "Info" -state "Calculating" 
-
-    # Inventar Datei erzeugen und ablegen im Datenverzeichnis
-    WriteInv -filePath "$filePath" -version $scope.Version
-
-    # LOGINventory Job Monitor Benachrichtigen
-    Notify -name "Schreiben abgeschlossen!" -itemName "Inventarisierung" -message $device.deviceName -category "Info" -state "Finished"
+    Notify -name $name -itemName "Inventory" -message $name -category "Info" -state "Finished" -ItemResult "Ok"
 }
+
+# Define file name and file path
+$fileName = "$($scope.TimeStamp)@Intune.inv"
+$filePath = "$($scope.DataDir)\$fileName"
+
+# Generate inventory file and save it in the data directory
+WriteInv -filePath "$filePath" -version $scope.Version
+
+# Notify LOGINventory Job Monitor
+Notify -name "Writing Data" -itemName "Inventory" -itemResult "Ok" -message "Intune" -category "Info" -state "Finished"
+
+$message = "Found $($devices.Count) devices in Intune, of which $numberOfMobileDevices are mobile devices."
+
+if ($scanOnlyMobileDevices -eq "true") {
+    $message = "Found $numberOfMobileDevices mobile devices in Intune."
+}
+
+Notify -name "Information" -itemName "Evaluation" -itemResult "Ok" -message $message -category "Info" -state "Finished"

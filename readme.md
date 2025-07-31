@@ -20,7 +20,7 @@ Skript | Beschreibung | Was wird in LOGINventory erzeugt?
 [baramundi-MobileDevices.ps1](baramundi-MobileDevices.ps1)|Dieses Skript verwendet die bConnect API von [baramundi](https://www.baramundi.com/), um Informationen zu mobilen Geräten (Smartphones & Tablets) aus dem Mobile Device Management abzurufen und diese als Assets in LOGINventory anzulegen. | Assets zu mobilen Geräten
 [csv-user-import.ps1](csv-user-import.ps1)|Dieses Skript öffnet liest aus einer csv-Datei Informationen zu vorhandenen Usern und legt diese in LOGINventory an. | UserAccounts und User
 [Device-Software-WMI.ps1](Device-Software-WMI.ps1)|Dieses Skript verwendet Windows Management Instrumentation (WMI), um Informationen über installierte Software von angegebenen Computern abzurufen. | Assets und Software-Pakete
-[IntuneDevices.ps1](IntuneDevices.ps1)|Dieses Skript verwendet Microsoft Graph, um Informationen zu mobilen Geräten (Smartphones & Tablets) und anderen Geräten aus Microsoft Intune abzurufen und diese als Assets in LOGINventory anzulegen. | Assets zu mobilen Geräten
+[IntuneDevices.ps1](IntuneDevices.ps1)|Dieses Skript verwendet Microsoft Graph, um Informationen zu mobilen Geräten (Smartphones & Tablets) und anderen Geräten aus Microsoft Intune abzurufen und diese als Assets in LOGINventory anzulegen. | Assets zu mobilen Geräten & anderen Geräten
 [jetbrains.ps1](jetbrains.ps1)|Dieses Skript ruft Informationen zu [JetBrains](https://www.jetbrains.com/) Produktlizenzen ab, indem es die vom Softwareherssteller JetBrains die Account API anfragt. | Cloud-Subscriptions und Lizenzen
 
 
