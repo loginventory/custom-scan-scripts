@@ -1,0 +1,14 @@
+{
+    "folders": [
+        {
+            "path": ".."
+        }
+    ]
+    , "settings" : {
+        "powershell.powerShellAdditionalExePaths": { 
+            "PSCore":   "C:/Program Files/PowerShell/7/pwsh.exe",
+            "WindowsPowerShell": "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"
+        },
+        "powershell.powerShellDefaultVersion": "WindowsPowerShell",
+    }
+}

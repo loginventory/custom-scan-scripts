@@ -22,7 +22,7 @@ Skript | Beschreibung | Was wird in LOGINventory erzeugt?
 [Device-Software-WMI.ps1](Device-Software-WMI.ps1)|Dieses Skript verwendet Windows Management Instrumentation (WMI), um Informationen über installierte Software von angegebenen Computern abzurufen. | Assets und Software-Pakete
 [IntuneDevices.ps1](IntuneDevices.ps1)|Dieses Skript verwendet Microsoft Graph, um Informationen zu mobilen Geräten (Smartphones & Tablets) und anderen Geräten aus Microsoft Intune abzurufen und diese als Assets in LOGINventory anzulegen. | Assets zu mobilen Geräten & anderen Geräten
 [jetbrains.ps1](jetbrains.ps1)|Dieses Skript ruft Informationen zu [JetBrains](https://www.jetbrains.com/) Produktlizenzen ab, indem es die vom Softwareherssteller JetBrains die Account API anfragt. | Cloud-Subscriptions und Lizenzen
-
+[CyberInsight.ps1](CyberInsight.ps1)|Dieses Skript dient als Schnittstelle zum Schwachstellenspezialisten [CyberInsight](https://cyber-insight.de/). Voraussetzungen: include\common.ps1, include\WebRequest.ps1, CyberInsight-Ordner | Schwachstellen-Analyse
 
 ## Vorraussetzungen
 
