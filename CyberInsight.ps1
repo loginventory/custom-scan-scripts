@@ -19,7 +19,9 @@
 
 
     [------------------- Optional (defaults) ----------------------]
-
+    <setting name="CyberInsightKeyProperty" serializeAs="String">
+        <value>Name</value> <!-- or InventoryNumber if used -->
+    </setting>
     <setting name="CyberInsightCriticality" serializeAs="String">
         <value>high|medium</value>
     </setting>
