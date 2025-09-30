@@ -127,7 +127,6 @@ function Invoke-LoginWebRequest {
     # ---------- Proxy initialisation (works like customer's global snippet) ----------
     $webProxy = $null
     $params.Proxy = $null
-    $usingDefaultCreds = $false
     if ($ProxyConfig -and $ProxyConfig.Url) {
         try {
             $proxyUrl = [string]$ProxyConfig.Url
@@ -156,7 +155,6 @@ function Invoke-LoginWebRequest {
             else {
                 # Default creds if explicitly requested OR when only URL is given (most corp proxies)
                 if ($ProxyConfig.UseDefaultCredentials -or -not $ProxyConfig.ContainsKey('UseDefaultCredentials')) {
-                    $usingDefaultCreds = $true
                     $webProxy.Credentials = [System.Net.CredentialCache]::DefaultNetworkCredentials
                     $params.ProxyUseDefaultCredentials = $true
                 }
