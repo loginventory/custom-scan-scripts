@@ -144,6 +144,29 @@ function Start-CyberInsightGet {
             return ($resp.Body | ConvertFrom-Json)
         }
 
+        function Get-CISoftwareVulnerabilityDevicesPage {
+            param(
+                [Parameter(Mandatory)]$Context,
+                [Parameter(Mandatory)][string]$CompanyId,
+                [Parameter(Mandatory)][string]$SoftwareId,
+                [int]$PageSize = 5000,
+                [string]$StartAfterCiId = $null,
+                [string]$Criticality = $null
+            )
+
+            $qs = @("page_size=$PageSize")
+            if ($StartAfterCiId) { $qs += "start_after=$StartAfterCiId" }
+            if ($Criticality) {
+                $qs += ($Criticality -split '\|' | ForEach-Object { "criticality=$($_.Trim())" })
+            }
+            $path = "companies/{0}/vulnerable_softwares/{1}/vulnerabilities/devices?{2}" -f $CompanyId, $SoftwareId, ($qs -join '&')
+
+            Write-CommonDebug -Context $Context.Common -Message ("GET vulnerabilities: {0}" -f $path)
+            $resp = Invoke-CIApi -Context $Context -Method GET -Path $path
+            if (-not $resp.IsSuccess) { throw "Vulnerabilities failed: HTTP $($resp.StatusCode) $($resp.StatusDescription)" }
+            return ($resp.Body | ConvertFrom-Json)
+        }
+
         # --- Main flow -----------------------------------------------------------
 
         Notify -name "CyberInsightApi" -itemName "Company" -message ("Searching '{0}'" -f $ctx.CompanyName) -category "Info" -state "Executing" -itemResult "None"
@@ -153,7 +176,7 @@ function Start-CyberInsightGet {
         # Page vulnerable software
         $softwarePageSize = 50
         $vulnPageSize     = 5000
-        $devPageSize      = 30
+        $devPageSize      = 5000
         $lastDaraScore    = $null
 
         $softwareList = New-Object System.Collections.Generic.List[object]
@@ -201,22 +224,24 @@ function Start-CyberInsightGet {
                     AddPropertyValue -name "Vulnerabilities.AvailabilityImpact"    -value $v.availability
                     AddPropertyValue -name "Vulnerabilities.IsExploitable"         -value $v.is_exploitable
                     AddPropertyValue -name "Vulnerabilities.SoftwareId"            -value $sw.id
-
-                    # Page affected devices
-                    $devPage  = 1
-                    do {
-                        $vdevs = Get-CIVulnerabilityDevicesPage -Context $ctx -CompanyId $companyId -SoftwareId $sw.id -CiId $v.ci_id -PageSize $devPageSize -PageNumber $devPage
-                        foreach ($d in $vdevs) {
-                            # Device key: prefer Name when KeyProperty=Name, else use server id
-                            $deviceKey = if ($ctx.KeyProperty -eq "Name") { [string]$d.name } else { $d.id }
-                            if (-not $deviceMap.ContainsKey($deviceKey)) { $deviceMap[$deviceKey] = New-Object System.Collections.Generic.List[object] }
-                            [void]$deviceMap[$deviceKey].Add([PSCustomObject]@{ software_id = $sw.id; ci_id = $v.ci_id })
-                        }
-                        $devPage++
-                    } while (@($vdevs).Count -ge $devPageSize)
                 }
                 $startAfterCi = if (@($vulns).Count -gt 0) { $vulns[-1].ci_id } else { $null }
             } while (@($vulns).Count -ge $vulnPageSize)
+
+            # Page affected devices
+            $startDevAfterCi = $null
+            do {
+                $vCiDevs = Get-CISoftwareVulnerabilityDevicesPage -Context $ctx -CompanyId $companyId -SoftwareId $sw.id -PageSize $devPageSize -StartAfterCiId $startDevAfterCi
+                foreach ($vCi in $vCiDevs) {
+                    foreach ($d in $vCi.devices) {
+                        # Device key: prefer Name when KeyProperty=Name, else use server id
+                        $deviceKey = if ($ctx.KeyProperty -eq "Name") { [string]$d.name } else { $d.id }
+                        if (-not $deviceMap.ContainsKey($deviceKey)) { $deviceMap[$deviceKey] = New-Object System.Collections.Generic.List[object] }
+                        [void]$deviceMap[$deviceKey].Add([PSCustomObject]@{ software_id = $sw.id; ci_id = $vCi.ci_id })
+                    }
+                }
+                $startDevAfterCi = if (@($vCiDevs).Count -gt 0) { $vCiDevs[-1].ci_id } else { $null }
+            } while (@($vCiDevs).Count -ge $devPageSize)
 
             # Write .inv for this software (sanitize name/version)
             $timestamp   = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
