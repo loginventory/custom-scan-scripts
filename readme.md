@@ -47,7 +47,7 @@ befinden. Aktuell werden nur Powershell-Skripte mit der Erweiterungen .ps1 unter
 
 Laden Sie sich hier aus diesem Repository die Skripte herunter, die Sie verwenden möchten oder nutzen Sie selbstgeschriebene Skripte. Positionieren Sie diese in einem der beiden Verzeichnisse und prüfen Sie, dass sich dort auch der Unterordner "include" mit der Datei `common.ps1` befindet!
 
-**Falls der Ordner "include" noch nicht existiert, legen Sie diesen an. Die `common.ps1` finden Sie hier zum [Download](include/common.ps1).**
+**Falls der Ordner "include" noch nicht existiert, legen Sie diesen an. Die `common.ps1` finden Sie  [hier](include/common.ps1). Die `WebRequest.ps1`finden Sie hier [hier](include/WebRequest.ps1).**
 
 Jetzt kann im Remote Scanner eine neue Definition vom Typ "Skriptbasierte Inventarisierung" angelegt und das entsprechende File ausgewählt werden.
 
@@ -56,8 +56,30 @@ Fügen Sie in der Definition auf der Seite "Parameter" die vom Skript benötigte
 ## Skript Umgebung
 
 Die Datei include\common.ps1 enthält Hilfsfunktionen. Sie wird über den Default Header eingebunden. Platzieren Sie diese Datei in Agents\include.
+Die Datei include\WebRequest.ps1 enthält eine Funktion zum senden von WebRequests (incl. Debugging, Proxy-Unterstützung und Support für Powershell 5 und 7+)
 
-## Allgemeiner Skript-Header
+## Debug Umgebung (Visual Studio Code) ##
+
+Für Visual Studio Code gibt es jetzt im Unterordner zum Einen Workspacekonfigurationen für PS5 und PS7, zum Anderen Startbeispiele für die Parameterübergabe, so dass die Skripte alle komplett in VS-Code getestet und anschließend 1:1 vom Scanner gesteuert werden können.
+Über den Parameter 'DebugFile' wird das Schreiben aus dem Script in ein selbst anzugebendes txt-File ermöglicht. Über 'Write-CommonDebug' kann man aus dem Script heraus Debug-Informationen schreiben. Wenn der Parameter im Produktivmodus dann entfernt wird, werden die Kommandos einfach ignoriert.
+
+
+**Beispiel Konfiguration im launch.json**
+~~~
+{
+    "name": "Download CyberInsight Data",
+    "type": "PowerShell",
+    "request": "launch",
+    "script": "${workspaceFolder}/CyberInsight.ps1",
+    "cwd": "${workspaceFolder}",
+    "args": [
+        "-parameter \"dataDir,C:/Users/Public/Documents/LOGIN/LOGINventory 9/Data#version,9.9#params,@{ApiKey=xyzABC;DebugFile=C:/temp/mydebugfile.txt}\""
+    ]
+}
+~~~
+dabei werden die Parameter 'dataDir' und 'version' später automatisch vom Scanner gesetzt - die Parameter in 'params' sind die, die in der Scandefinition definiert werden.
+
+## Allgemeiner Skript-Header (Variante 1)
 
 Dieser Header definiert einen Eingabeparameter, bindet die `common.ps1`-Datei aus dem `include`-Verzeichnis ein und initialisiert das Skript mit der `Init`-Funktion, die in `common.ps1` definiert ist. Stellen Sie sicher, dass Sie den allgemeinen Header in jedes der PowerShell-Skripte integrieren, um eine konsistente Initialisierung und Einbindung gemeinsamer Ressourcen zu gewährleisten.
 
@@ -93,6 +115,42 @@ Write-Host "TimeStamp: $($scope.TimeStamp)"
 Write-Host "TimeStamp2: $($scope.TimeStamp2)"
 ```
 
+
+## Allgemeiner Skript-Header (Variante 2)
+
+Für komplexere Skripte und für die Verwendung von Debugging, ProxyConfig und der integrierten WebRequest-Funktion gibt es eine neue Art der Initialisierung, die einen umfangreicheren Kontext erzeugt, der an diese Funktionen übergeben werden kann, aber auch im eigenen Skript alle Parameter zur Verfügung stellt. Des Weiteren werden die internen Standardparameter (Proxykonfiguration, ...) primär aus der LOGINventory Konfiguration gelesen, können aber bei Bedarf über die Parameter in der Scandefinition überschrieben werden. Der Kontext hat nach der Initialisierung folgende Datenstruktur:
+
+- **$ctx**
+  - **Version**
+  - **ConfigPath**
+  - **LiInstallPath**
+  - **ProxyConfig**
+    - **Active**
+    - **Url**
+    - **Username**
+    - **Password**
+    - **UseDefaultCredentials**
+  - **TimeStamp**
+  - **TimeStamp2**
+  - **DataDir**
+  - **DebugFile**
+  - **UserParameters** (enthalten alle anderen Parameter der Scandefinitionen)
+
+~~~powershell
+param([string]$parameter = "")
+
+# Common helpers (Init/Notify/etc.)
+. (Join-Path -Path $PSScriptRoot -ChildPath "include\common.ps1")
+
+# 1) Build Common context (encoding, debug & proxy)
+$ctx = New-CommonContext -Parameters $parameter -StartLabel 'STARTER'
+~~~
+
+## Verwendung im Skript
+
+~~~powershell
+$apiKey = $ctx.UserParameters.ApiKey
+~~~
 
 ## Grundlegende Verwendung
 

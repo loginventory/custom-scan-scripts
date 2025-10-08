@@ -692,6 +692,7 @@ function New-CommonContext {
         DataDir        = $eff.DataDir
         # Debug
         DebugFile      = $eff.DebugFile
+        # Parameter
         UserParameters = $allParams
     }
 
