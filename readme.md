@@ -141,8 +141,9 @@ param([string]$parameter = "")
 
 # Common helpers (Init/Notify/etc.)
 . (Join-Path -Path $PSScriptRoot -ChildPath "include\common.ps1")
+. (Join-Path -Path $PSScriptRoot -ChildPath "include\WebRequest.ps1")
 
-# 1) Build Common context (encoding, debug & proxy)
+# Build Common context (encoding, debug & proxy)
 $ctx = New-CommonContext -Parameters $parameter -StartLabel 'STARTER'
 ~~~
 
