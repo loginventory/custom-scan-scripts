@@ -30,7 +30,9 @@
     </setting>
 
 .PARAMETER params
-    Encoded parameter blob (Ensure "Action" parameter [Get/Post]).
+    Ensure "Action" parameter [Get/Post]
+    Ensure "Engine" parameter [psc.exe] (min. Post Definition)
+    
 #>
 param([string]$parameter = "")
 
