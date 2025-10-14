@@ -26,7 +26,7 @@
         <value>high|medium</value>
     </setting>
     <setting name="CyberInsightExportQuery" serializeAs="String">
-        <value>IT Inventory\Vulnerabilities\Vulnerability Export</value>
+        <value>Vulnerabilities\Vulnerability Export</value>
     </setting>
 
 .PARAMETER params
