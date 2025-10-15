@@ -64,7 +64,7 @@ function Resolve-CI-EffConfig {
     $company      = Get-EffectiveValue -Primary $Parameters -Fallback $fileCfg -Name 'CyberInsightCompanyName' -As string
     $keyProperty  = Get-EffectiveValue -Primary $Parameters -Fallback $fileCfg -Name 'CyberInsightKeyProperty' -As string -Default 'Name'
     $criticality  = Get-EffectiveValue -Primary $Parameters -Fallback $fileCfg -Name 'CyberInsightCriticality' -As string -Default 'high|medium'
-    $exportQuery  = Get-EffectiveValue -Primary $Parameters -Fallback $fileCfg -Name 'CyberInsightExportQuery' -As string -Default 'Vulnerabilities\Vulnerability Export'
+    $exportQuery  = Get-EffectiveValue -Primary $Parameters -Fallback $fileCfg -Name 'CyberInsightExportQuery' -As string -Default 'Vulnerability Assessment\Vulnerability Export'
     $language     = Get-EffectiveValue -Primary $Parameters -Fallback $fileCfg -Name 'CyberInsightApiLanguage' -Default 'en' -As string
 
     [pscustomobject]@{
