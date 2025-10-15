@@ -7,9 +7,6 @@
 
     [------------------------- Required ---------------------------]
 
-    <setting name="CyberInsightEndpoint" serializeAs="String">
-        <value>[CyberInsight Api Base Url]</value>
-    </setting>
     <setting name="CyberInsightApiKey" serializeAs="String">
         <value>Your API KEY</value>
     </setting>
@@ -19,6 +16,9 @@
 
 
     [------------------- Optional (defaults) ----------------------]
+    <setting name="CyberInsightEndpoint" serializeAs="String">
+        <value>https://ci-gateway-5j2lrwe9.nw.gateway.dev</value>
+    </setting>
     <setting name="CyberInsightKeyProperty" serializeAs="String">
         <value>Name</value> <!-- or InventoryNumber if used -->
     </setting>

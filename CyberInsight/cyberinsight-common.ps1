@@ -59,7 +59,7 @@ function Resolve-CI-EffConfig {
         $fileCfg = Get-LoginventoryConfigSettings -ConfigPath $Common.ConfigPath -Names $keys
     }
 
-    $endpoint     = Get-EffectiveValue -Primary $Parameters -Fallback $fileCfg -Name 'CyberInsightEndpoint'    -As string
+    $endpoint     = Get-EffectiveValue -Primary $Parameters -Fallback $fileCfg -Name 'CyberInsightEndpoint'    -As string -Default 'https://ci-gateway-5j2lrwe9.nw.gateway.dev'
     $apiKey       = Get-EffectiveValue -Primary $Parameters -Fallback $fileCfg -Name 'CyberInsightApiKey'      -As string
     $company      = Get-EffectiveValue -Primary $Parameters -Fallback $fileCfg -Name 'CyberInsightCompanyName' -As string
     $keyProperty  = Get-EffectiveValue -Primary $Parameters -Fallback $fileCfg -Name 'CyberInsightKeyProperty' -As string -Default 'Name'
