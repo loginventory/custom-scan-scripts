@@ -127,23 +127,6 @@ function Start-CyberInsightGet {
             return ($resp.Body | ConvertFrom-Json)
         }
 
-        function Get-CIVulnerabilityDevicesPage {
-            param(
-                [Parameter(Mandatory)]$Context,
-                [Parameter(Mandatory)][string]$CompanyId,
-                [Parameter(Mandatory)][string]$SoftwareId,
-                [Parameter(Mandatory)][string]$CiId,
-                [int]$PageSize = 10,
-                [int]$PageNumber = 1
-            )
-
-            $path = "companies/{0}/vulnerable_softwares/{1}/vulnerabilities/{2}/devices?page_size={3}&page={4}" -f $CompanyId, $SoftwareId, $CiId, $PageSize, $PageNumber
-            Write-CommonDebug -Context $Context.Common -Message ("GET vulnerability devices: {0}" -f $path)
-            $resp = Invoke-CIApi -Context $Context -Method GET -Path $path
-            if (-not $resp.IsSuccess) { throw "Vuln devices failed: HTTP $($resp.StatusCode) $($resp.StatusDescription)" }
-            return ($resp.Body | ConvertFrom-Json)
-        }
-
         function Get-CISoftwareVulnerabilityDevicesPage {
             param(
                 [Parameter(Mandatory)]$Context,
@@ -231,7 +214,7 @@ function Start-CyberInsightGet {
             # Page affected devices
             $startDevAfterCi = $null
             do {
-                $vCiDevs = Get-CISoftwareVulnerabilityDevicesPage -Context $ctx -CompanyId $companyId -SoftwareId $sw.id -PageSize $devPageSize -StartAfterCiId $startDevAfterCi
+                $vCiDevs = Get-CISoftwareVulnerabilityDevicesPage -Context $ctx -CompanyId $companyId -SoftwareId $sw.id -PageSize $devPageSize -StartAfterCiId $startDevAfterCi -Criticality $ctx.Criticality
                 foreach ($vCi in $vCiDevs) {
                     foreach ($d in $vCi.devices) {
                         # Device key: prefer Name when KeyProperty=Name, else use server id
