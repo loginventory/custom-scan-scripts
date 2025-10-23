@@ -51,7 +51,7 @@ function Resolve-CI-EffConfig {
     $keys = @(
         'CyberInsightEndpoint','CyberInsightApiKey','CyberInsightApiLanguage',
         'CyberInsightCompanyName','CyberInsightKeyProperty','CyberInsightCriticality',
-        'CyberInsightExportQuery'
+        'CyberInsightExportQuery', 'CyberInsightSyncQuery'
     )
 
     $fileCfg = @{}
@@ -65,7 +65,8 @@ function Resolve-CI-EffConfig {
     $keyProperty  = Get-EffectiveValue -Primary $Parameters -Fallback $fileCfg -Name 'CyberInsightKeyProperty' -As string -Default 'Name'
     $criticality  = Get-EffectiveValue -Primary $Parameters -Fallback $fileCfg -Name 'CyberInsightCriticality' -As string -Default 'high|medium'
     $exportQuery  = Get-EffectiveValue -Primary $Parameters -Fallback $fileCfg -Name 'CyberInsightExportQuery' -As string -Default 'Vulnerability Assessment\Vulnerability Export'
-    $language     = Get-EffectiveValue -Primary $Parameters -Fallback $fileCfg -Name 'CyberInsightApiLanguage' -Default 'en' -As string
+    $syncQuery  = Get-EffectiveValue -Primary $Parameters -Fallback $fileCfg -Name 'CyberInsightSyncQuery' -As string -Default 'Vulnerability Assessment\Software Vulnerabilities'
+   $language     = Get-EffectiveValue -Primary $Parameters -Fallback $fileCfg -Name 'CyberInsightApiLanguage' -Default 'en' -As string
 
     [pscustomobject]@{
         BaseUrl     = $endpoint
@@ -74,6 +75,7 @@ function Resolve-CI-EffConfig {
         KeyProperty = $keyProperty
         Criticality = $criticality
         ExportQuery = $exportQuery
+        SyncQuery   = $syncQuery
         Language    = $language
     }
 }
@@ -107,6 +109,7 @@ function New-CIContext {
         KeyProperty   = $ci.KeyProperty
         Criticality   = $ci.Criticality
         ExportQuery   = $ci.ExportQuery
+        SyncQuery     = $ci.SyncQuery
         Language      = $ci.Language
 
         # ---- Token cache ----

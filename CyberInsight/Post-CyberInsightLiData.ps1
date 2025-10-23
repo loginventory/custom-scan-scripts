@@ -40,25 +40,6 @@ Set-StrictMode -Version Latest
 . (Join-Path -Path $PSScriptRoot -ChildPath "..\include\WebRequest.ps1")
 . (Join-Path -Path $PSScriptRoot -ChildPath "cyberinsight-common.ps1")
 
-function Initialize-LiDrive {
-    <#
-    .SYNOPSIS
-        Ensures the LOGINventory PSDrive (LI:) is available.
-    .PARAMETER installPath
-        Optional install path passed to LOGINventory snap-ins/app-domain.
-    #>
-    [CmdletBinding()]
-    param([string]$installPath = "")
-    if (-not (Get-PSDrive -Name Li -ErrorAction SilentlyContinue)) {
-        Add-PSSnapin loginventory
-        Add-PSSnapin loginventorycmdlets
-        # Set culture to English (avoid localized field names in LI data)
-        [System.Threading.Thread]::CurrentThread.CurrentUICulture = "en-US"
-        [System.AppDomain]::CurrentDomain.SetPrincipalPolicy([System.Security.Principal.PrincipalPolicy]::WindowsPrincipal)
-        [System.AppDomain]::CurrentDomain.SetData("APPBASE", $installPath)
-        New-PSDrive -Scope global -Name LI -PSProvider LOGINventory -Root ""
-    }
-}
 
 function Start-CyberInsightPost {
     <#
@@ -78,14 +59,7 @@ function Start-CyberInsightPost {
     try {
         Write-CommonDebug -Context $ctx.Common -Message "Collecting data from LOGINventory interface..."
 
-        # Determine LI install path; default to PowerShell home folder if not set
-        $installPath = $ctx.Common.LiInstallPath
-        if ([string]::IsNullOrWhiteSpace($installPath)) {
-            $installPath = Split-Path -Path $PSHome
-        } else {
-            $installPath = $installPath.Trim()
-        }
-        Initialize-LiDrive -installPath $installPath
+        Initialize-LiDrive -context $ctx.Common
 
         # Determine LI location (folder/query in the LI: provider)
         $location = $ctx.ExportQuery

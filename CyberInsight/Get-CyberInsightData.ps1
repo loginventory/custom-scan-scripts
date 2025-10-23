@@ -58,8 +58,6 @@ function Start-CyberInsightGet {
     Write-CommonDebug -Context $ctx.Common -Message ("Effective Config: Url={0}, Company={1}, Language={2}, ProxyActive={3}" -f $ctx.ApiUrl, $ctx.CompanyName, $ctx.Language, $ctx.Common.ProxyConfig.Active)
 
     try {
-        # --- Helper functions (web calls + debug, no logic changes) ----------------
-
         function Get-CICompanyId {
             param([Parameter(Mandatory)]$Context)
 
@@ -239,6 +237,59 @@ function Start-CyberInsightGet {
             Notify -name "Vulnerability Data" -itemName "-" -message ("Written to {0}" -f $filePath) -category "Info" -state "Finished" -itemResult "Ok"
 
             Notify -name "$($sw.software_name) [$($sw.software_version)]" -itemName "Vulnerabilities" -message "Done" -category "Info" -state "Finished" -itemResult "Ok"
+        }
+
+        # Get current export data to determine differentials in order to cleanup missing software
+        
+        Initialize-LiDrive -context $ctx.Common
+        # Determine LI location (folder/query in the LI: provider)
+        $location = $ctx.SyncQuery
+
+        Push-Location
+        try {
+            Set-Location ("LI:\" + $location)
+            $left = Get-LiData |
+            Select-Object `
+                @{n='Name';      e={$_.'SoftwarePackage.Name'}},
+                @{n='Version';   e={$_.'SoftwarePackage.Version'}},
+                @{n='Publisher'; e={$_.'SoftwarePackage.Publisher'}},
+                @{n='Platform'; e={$_.'SoftwarePackage.Platform'}} |
+            Sort-Object Name, Version, Publisher, Platform -Unique
+
+
+            $right = $softwareList | Select-Object `
+                @{n='Name';      e={$_.software_name}},
+                @{n='Version';   e={$_.software_version}},
+                @{n='Publisher'; e={$_.software_publisher}},
+                @{n='Platform'; e={$_.software_metadata}}
+
+            # Nur Einträge, die NUR in $left vorkommen
+            $missing = Compare-Object -ReferenceObject $left -DifferenceObject $right `
+                    -Property Name,Version,Publisher,Platform -PassThru |
+                    Where-Object SideIndicator -eq '<=' |
+                    Sort-Object Name,Version,Publisher,Platform -Unique
+
+            if ($missing) {
+                foreach ($sw in $missing) {
+                    Notify -name "$($sw.Name) [$($sw.Version)]" -itemName "Vulnerabilities" -message "Differentials" -category "Info" -state "Executing" -itemResult "None"
+                    NewEntity -name "SoftwarePackage"
+                    AddPropertyValue -name "Name"      -value $sw.Name
+                    AddPropertyValue -name "Version"   -value $sw.Version
+                    AddPropertyValue -name "Publisher" -value $sw.Publisher
+                    AddPropertyValue -name "Platform"           -value $sw.Platform
+                    AddPropertyValue -name "VulnerabilityScore" -value $null
+                    AddPropertyValue -name "SoftwareId"         -value $null
+                    AddPropertyValue -name "Vulnerabilities" -value $null
+                }
+                $timestamp = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
+                $fileName  = "{0}_ci_cleanup.inv" -f $timestamp
+                $filePath  = Join-Path $ctx.Common.DataDir $fileName
+                Write-CommonDebug -Context $ctx.Common -Message ("Writing INV to {0}" -f $filePath)
+                WriteInv -filePath $filePath -version $ctx.Common.Version -useDataNamespace $true
+            }
+        }
+        finally {
+            Pop-Location
         }
 
         # Write device mapping .inv files (sanitize device key)

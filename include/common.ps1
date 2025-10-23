@@ -294,7 +294,9 @@ function ConvertTo-Xml {
     #>
     param (
         [Parameter(Mandatory = $true)]
-        $version
+        $version,
+        [Parameter(Mandatory = $false)]
+        [bool]$useDataNamespace = $false
     )
 
     $loginfoNamespaceVersion = ($version -split '\.')[0] + ".0"
@@ -311,8 +313,13 @@ function ConvertTo-Xml {
         $xmlWriter.WriteStartDocument()
         $xmlWriter.WriteStartElement('root')
 
+        $namespace = "http://www.loginventory.com/schemas/LOGINventory/data/$loginfoNamespaceVersion"
+        if (-not $useDataNamespace) {
+            $namespace = $namespace + "/LogInfo"
+        }
+
         foreach ($item in $Script:lEntities) {
-            $xmlWriter.WriteStartElement($item.Name, "http://www.loginventory.com/schemas/LOGINventory/data/$loginfoNamespaceVersion/LogInfo")
+            $xmlWriter.WriteStartElement($item.Name, $namespace)
 
             $previousKeyPrefix = $null
             $keyProperty = $null
@@ -478,10 +485,13 @@ function WriteInv {
         [string]$filePath,
 
         [Parameter(Mandatory = $true)]
-        [string]$version
+        [string]$version,
+
+        [Parameter(Mandatory = $false)]
+        [bool]$useDataNamespace = $false
     )
 
-    $itemXml = ConvertTo-Xml -version $version
+    $itemXml = ConvertTo-Xml -version $version -useDataNamespace $useDataNamespace
     $mxl = PostProcessXml -Xml $itemXml
     $mxl | Out-File -FilePath $filePath
     $lEntities.Clear() | Out-Null
@@ -763,5 +773,33 @@ function Write-CommonDebug {
     )
     if ($Context.DebugFile) {
         "{0:O} | {1}" -f (Get-Date).ToUniversalTime(), $Message | Out-File -FilePath $Context.DebugFile -Append -Encoding UTF8
+    }
+}
+
+function Initialize-LiDrive {
+    <#
+    .SYNOPSIS
+        Ensures the LOGINventory PSDrive (LI:) is available.
+    .PARAMETER installPath
+        Optional install path passed to LOGINventory snap-ins/app-domain.
+    #>
+    [CmdletBinding()]
+    param([pscustomobject]$context)
+
+    # Determine LI install path; default to PowerShell home folder if not set
+    $installPath = $context.LiInstallPath
+    if ([string]::IsNullOrWhiteSpace($installPath)) {
+        $installPath = Split-Path -Path $PSHome
+    } else {
+        $installPath = $installPath.Trim()
+    }
+    if (-not (Get-PSDrive -Name Li -ErrorAction SilentlyContinue)) {
+        Add-PSSnapin loginventory
+        Add-PSSnapin loginventorycmdlets
+        # Set culture to English (avoid localized field names in LI data)
+        [System.Threading.Thread]::CurrentThread.CurrentUICulture = "en-US"
+        [System.AppDomain]::CurrentDomain.SetPrincipalPolicy([System.Security.Principal.PrincipalPolicy]::WindowsPrincipal)
+        [System.AppDomain]::CurrentDomain.SetData("APPBASE", $installPath)
+        New-PSDrive -Scope global -Name LI -PSProvider LOGINventory -Root ""
     }
 }
