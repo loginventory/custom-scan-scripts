@@ -28,10 +28,12 @@
     <setting name="CyberInsightExportQuery" serializeAs="String">
         <value>Vulnerability Assessment\Vulnerability Export</value>
     </setting>
-
+    <setting name="CyberInsightSyncQuery" serializeAs="String">
+        <value>Vulnerability Assessment\Software Vulnerabilities</value>
+    </setting>
 .PARAMETER params
     Ensure "Action" parameter [Get/Post]
-    Ensure "Engine" parameter [psc.exe] (min. Post Definition)
+    Ensure "Engine" parameter [psc.exe]
     
 #>
 param([string]$parameter = "")
