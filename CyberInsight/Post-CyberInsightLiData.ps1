@@ -26,8 +26,6 @@
       - include\WebRequest.ps1       (Invoke-LoginWebRequest, URL normalization)
       - cyberinsight-common.ps1      (CI context & API helpers)
       - LOGINventory PowerShell snap-ins available on the host
-
-    Last Updated: 2025-09-26
 #>
 
 param (
