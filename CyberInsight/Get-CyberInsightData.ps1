@@ -22,8 +22,6 @@
       - include\common.ps1
       - include\WebRequest.ps1
       - cyberinsight-common.ps1
-
-    Last Updated: 2025-09-26
 #>
 
 param (
