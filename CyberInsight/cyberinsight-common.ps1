@@ -21,9 +21,7 @@
       - This file expects the following includes to be loaded before use:
           include\common.ps1     (New-CommonContext, helpers, proxy/config resolution)
           include\WebRequest.ps1 (Invoke-LoginWebRequest, URL normalization)
-      - Windows PowerShell 5.1 or PowerShell 7+
-
-    Last Updated: 2025-09-26
+      - Windows PowerShell 5.1
 #>
 
 . (Join-Path -Path $PSScriptRoot -ChildPath "..\include\common.ps1")
