@@ -19,6 +19,7 @@ Skript | Beschreibung | Was wird in LOGINventory erzeugt?
 [AppTec360-MobileDevices.ps1](AppTec360-MobileDevices.ps1)|Dieses Skript verwendet die API von [AppTec360](https://www.apptec360.com/mobile-device-management/), um Informationen zu mobilen Geräten (Smartphones & Tablets) aus dem Mobile Device Management abzurufen und diese als Assets in LOGINventory anzulegen. | Assets zu mobilen Geräten
 [baramundi-MobileDevices.ps1](baramundi-MobileDevices.ps1)|Dieses Skript verwendet die bConnect API von [baramundi](https://www.baramundi.com/), um Informationen zu mobilen Geräten (Smartphones & Tablets) aus dem Mobile Device Management abzurufen und diese als Assets in LOGINventory anzulegen. | Assets zu mobilen Geräten
 [csv-user-import.ps1](csv-user-import.ps1)|Dieses Skript öffnet liest aus einer csv-Datei Informationen zu vorhandenen Usern und legt diese in LOGINventory an. | UserAccounts und User
+[CyberInsight.ps1](CyberInsight.ps1)|Dieses Skript wird für die Nutzung der [Schwachstellenanalyse in LOGINventory](https://www.loginventory.info/documentation/9/de/schwachstellen/) mit unserem Partner Cyber Insight verwendet. Das Skript benötigt außerdem den Ordner [CyberInsight](https://github.com/loginventory/custom-scan-scripts/tree/main/CyberInsight) um richtg zu funktionieren. | Schwachstellen in Software-Paketen
 [Device-Software-WMI.ps1](Device-Software-WMI.ps1)|Dieses Skript verwendet Windows Management Instrumentation (WMI), um Informationen über installierte Software von angegebenen Computern abzurufen. | Assets und Software-Pakete
 [IntuneDevices.ps1](IntuneDevices.ps1)|Dieses Skript verwendet Microsoft Graph, um Informationen zu mobilen Geräten (Smartphones & Tablets) und anderen Geräten aus Microsoft Intune abzurufen und diese als Assets in LOGINventory anzulegen. | Assets zu mobilen Geräten & anderen Geräten
 [jetbrains.ps1](jetbrains.ps1)|Dieses Skript ruft Informationen zu [JetBrains](https://www.jetbrains.com/) Produktlizenzen ab, indem es die vom Softwareherssteller JetBrains die Account API anfragt. | Cloud-Subscriptions und Lizenzen
@@ -258,3 +259,4 @@ Gibt das Ergebins des Vorgans/Elements an:
 - Nutzen Sie `Write-Host` für einfache Benachrichtigungen oder `Notify` für detailliertere Benachrichtigungen mit zusätzlichen Informationen wie Kategorie und Zustand.
 
 Diese Dokumentation bietet einen Überblick über die Verwendung des Skripts im Kontext von LOGINventory und RemoteScanner. Es ist wichtig, die spezifischen Anforderungen und Strukturen der LOGINventory-Umgebung zu verstehen, um das Skript effektiv einzusetzen.
+
