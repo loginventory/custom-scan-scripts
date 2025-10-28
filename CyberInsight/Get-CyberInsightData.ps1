@@ -162,15 +162,21 @@ function Start-CyberInsightGet {
 
         do {
             $VulnerableSoftware = Get-CIVulnerableSoftwarePage -Context $ctx -CompanyId $companyId -PageSize $softwarePageSize -StartAfterDaraScore $lastDaraScore
-
-            foreach ($sw in $VulnerableSoftware) {
-                Notify -name "$($sw.software_name) [$($sw.software_version)]" -itemName "-" -message "-" -category "Info" -itemResult "None" -state "Queued"
-                [void]$softwareList.Add($sw)
-                $lastDaraScore = $sw.dara_score_sum
+            if ($VulnerableSoftware) {
+                foreach ($sw in $VulnerableSoftware) {
+                    Notify -name "$($sw.software_name) [$($sw.software_version)]" -itemName "-" -message "-" -category "Info" -itemResult "None" -state "Queued"
+                    [void]$softwareList.Add($sw)
+                    $lastDaraScore = $sw.dara_score_sum
+                }
+                if ($VulnerableSoftware.Count -lt $softwarePageSize) {
+                    break
+                }
             }
-            if ($VulnerableSoftware.Count -lt $softwarePageSize) {
-                break
+            else {
+                Notify -name "CyberInsightApi" -itemName "-" -message "No data available yet, please try again later" -category "Error" -state "Faulty" -itemResult "Error"
+                exit 1
             }
+            
         } while ($true)
 
         # Mapping: device -> list of (software_id, ci_id)
