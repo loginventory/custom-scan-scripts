@@ -189,7 +189,8 @@ function Start-CyberInsightGet {
             AddPropertyValue -name "Version"            -value $sw.software_version
             AddPropertyValue -name "Publisher"          -value $sw.software_publisher
             AddPropertyValue -name "Platform"           -value $sw.software_metadata
-            AddPropertyValue -name "VulnerabilityScore" -value ($sw.dara_score_sum * 10)
+            AddPropertyValue -name "VulnerabilityScore" -value ([math]::Round($sw.dara_score_sum * 10, 2, [System.MidpointRounding]::AwayFromZero))
+
             AddPropertyValue -name "SoftwareId"         -value $sw.id
 
             $startAfterCi = $null
@@ -197,7 +198,7 @@ function Start-CyberInsightGet {
                 $vulns = Get-CISoftwareVulnerabilitiesPage -Context $ctx -CompanyId $companyId -SoftwareId $sw.id -PageSize $vulnPageSize -StartAfterCiId $startAfterCi -Criticality $ctx.Criticality
                 foreach ($v in $vulns) {
                     AddPropertyValue -name "Vulnerabilities.Name"                  -value $v.ci_id
-                    AddPropertyValue -name "Vulnerabilities.Score"                 -value ($v.dara_score * 10)
+                    AddPropertyValue -name "Vulnerabilities.Score"                 -value ([math]::Round($v.dara_score * 10, 2, [System.MidpointRounding]::AwayFromZero))
                     AddPropertyValue -name "Vulnerabilities.Description"           -value $v.description
                     AddPropertyValue -name "Vulnerabilities.AttackVector"          -value $v.attack_vector
                     AddPropertyValue -name "Vulnerabilities.AttackComplexity"      -value $v.attack_complexity
