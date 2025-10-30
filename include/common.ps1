@@ -429,6 +429,7 @@ function PostProcessXml {
 
     foreach ($node in $xmlDocument.DocumentElement.ChildNodes) {
         $importedNode = $newXmlDocument.ImportNode($node, $true)
+        [void]$importedNode.SetAttribute("ClearMissingCustomProperties", "false")
         $newRoot.AppendChild($importedNode) | Out-Null
     }
 
