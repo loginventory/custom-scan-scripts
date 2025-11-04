@@ -29,7 +29,7 @@
         <value>Vulnerability Assessment\Vulnerability Export</value>
     </setting>
     <setting name="CyberInsightSyncQuery" serializeAs="String">
-        <value>Vulnerability Assessment\Software Vulnerabilities</value>
+        <value>Vulnerability Assessment\All Vulnerabilities per Software Package</value>
     </setting>
 .PARAMETER params
     Ensure "Action" parameter [Get/Post]
