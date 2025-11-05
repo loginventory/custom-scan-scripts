@@ -77,7 +77,7 @@ function Start-CyberInsightGet {
             Write-CommonDebug -Context $Context.Common -Message ("GET devices for company {0}" -f $CompanyId)
             $resp = Invoke-CIApi -Context $Context -Method GET -Path ("companies/{0}/devices" -f $CompanyId)
             if (-not $resp.IsSuccess) { throw "Devices failed: HTTP $($resp.StatusCode) $($resp.StatusDescription)" }
-            return ($resp.Body | ConvertFrom-Json)
+            return @($resp.Body | ConvertFrom-Json)
         }
 
         function Get-CIVulnerableSoftwarePage {
@@ -97,7 +97,7 @@ function Start-CyberInsightGet {
             Write-CommonDebug -Context $Context.Common -Message ("GET vulnerable_softwares: {0}" -f $path)
             $resp = Invoke-CIApi -Context $Context -Method GET -Path $path
             if (-not $resp.IsSuccess) { throw "Vulnerable software failed: HTTP $($resp.StatusCode) $($resp.StatusDescription)" }
-            return ($resp.Body | ConvertFrom-Json)
+            return @($resp.Body | ConvertFrom-Json)
         }
 
         function Get-CISoftwareVulnerabilitiesPage {
@@ -120,7 +120,7 @@ function Start-CyberInsightGet {
             Write-CommonDebug -Context $Context.Common -Message ("GET vulnerabilities: {0}" -f $path)
             $resp = Invoke-CIApi -Context $Context -Method GET -Path $path
             if (-not $resp.IsSuccess) { throw "Vulnerabilities failed: HTTP $($resp.StatusCode) $($resp.StatusDescription)" }
-            return ($resp.Body | ConvertFrom-Json)
+            return @($resp.Body | ConvertFrom-Json)
         }
 
         function Get-CISoftwareVulnerabilityDevicesPage {
@@ -143,7 +143,7 @@ function Start-CyberInsightGet {
             Write-CommonDebug -Context $Context.Common -Message ("GET vulnerabilities: {0}" -f $path)
             $resp = Invoke-CIApi -Context $Context -Method GET -Path $path
             if (-not $resp.IsSuccess) { throw "Vulnerabilities failed: HTTP $($resp.StatusCode) $($resp.StatusDescription)" }
-            return ($resp.Body | ConvertFrom-Json)
+            return @($resp.Body | ConvertFrom-Json)
         }
 
         # --- Main flow -----------------------------------------------------------
@@ -162,24 +162,21 @@ function Start-CyberInsightGet {
 
         do {
             $VulnerableSoftware = Get-CIVulnerableSoftwarePage -Context $ctx -CompanyId $companyId -PageSize $softwarePageSize -StartAfterDaraScore $lastDaraScore
-            if ($VulnerableSoftware) {
-                $VulnerableSoftware = @($VulnerableSoftware)
-                foreach ($sw in $VulnerableSoftware) {
-                    Notify -name "$($sw.software_name) [$($sw.software_version)]" -itemName "-" -message "-" -category "Info" -itemResult "None" -state "Queued"
-                    [void]$softwareList.Add($sw)
-                    $lastDaraScore = $sw.dara_score_sum
-                }
-                if ($VulnerableSoftware.Count -lt $softwarePageSize) {
-                    break
-                }
+              
+            foreach ($sw in $VulnerableSoftware) {
+                Notify -name "$($sw.software_name) [$($sw.software_version)]" -itemName "-" -message "-" -category "Info" -itemResult "None" -state "Queued"
+                [void]$softwareList.Add($sw)
+                $lastDaraScore = $sw.dara_score_sum
             }
-            else {
-                Notify -name "CyberInsightApi" -itemName "-" -message "No data available yet, please try again later" -category "Error" -state "Faulty" -itemResult "Error"
-                exit 1
+            if ($VulnerableSoftware.Count -lt $softwarePageSize) {
+                break
             }
             
         } while ($true)
-
+        if ($softwareList.Count -eq 0) {
+            Notify -name "CyberInsightApi" -itemName "-" -message "No data available yet, please try again later" -category "Error" -state "Faulty" -itemResult "Error"
+            exit 1
+        }
         # Mapping: device -> list of (software_id, ci_id)
         $deviceMap = @{}
         foreach ($sw in $softwareList) {
@@ -213,7 +210,7 @@ function Start-CyberInsightGet {
                     AddPropertyValue -name "Vulnerabilities.SoftwareId"            -value $sw.id
                 }
                 $startAfterCi = if (@($vulns).Count -gt 0) { $vulns[-1].ci_id } else { $null }
-            } while (@($vulns).Count -ge $vulnPageSize)
+            } while ($vulns.Count -ge $vulnPageSize)
 
             # Page affected devices
             $startDevAfterCi = $null
@@ -227,8 +224,8 @@ function Start-CyberInsightGet {
                         [void]$deviceMap[$deviceKey].Add([PSCustomObject]@{ software_id = $sw.id; ci_id = $vCi.ci_id })
                     }
                 }
-                $startDevAfterCi = if (@($vCiDevs).Count -gt 0) { $vCiDevs[-1].ci_id } else { $null }
-            } while (@($vCiDevs).Count -ge $devPageSize)
+                $startDevAfterCi = if ($vCiDevs.Count -gt 0) { $vCiDevs[-1].ci_id } else { $null }
+            } while ($vCiDevs.Count -ge $devPageSize)
 
             # Write .inv for this software (sanitize name/version)
             $timestamp   = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
