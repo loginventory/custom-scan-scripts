@@ -153,7 +153,7 @@ function Start-CyberInsightGet {
         Notify -name "CyberInsightApi" -itemName "Company" -message ("Found {0}" -f $ctx.CompanyName) -category "Info" -state "Finished" -itemResult "Ok"
 
         # Page vulnerable software
-        $softwarePageSize = 50
+        $softwarePageSize = 100
         $vulnPageSize     = 5000
         $devPageSize      = 5000
         $lastDaraScore    = $null
@@ -163,6 +163,7 @@ function Start-CyberInsightGet {
         do {
             $VulnerableSoftware = Get-CIVulnerableSoftwarePage -Context $ctx -CompanyId $companyId -PageSize $softwarePageSize -StartAfterDaraScore $lastDaraScore
             if ($VulnerableSoftware) {
+                $VulnerableSoftware = @($VulnerableSoftware)
                 foreach ($sw in $VulnerableSoftware) {
                     Notify -name "$($sw.software_name) [$($sw.software_version)]" -itemName "-" -message "-" -category "Info" -itemResult "None" -state "Queued"
                     [void]$softwareList.Add($sw)
