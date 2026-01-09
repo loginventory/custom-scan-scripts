@@ -307,13 +307,7 @@ function Invoke-LoginWebRequest {
                 try {
                     $code = [int]$resp.StatusCode
                     $desc = [string]$resp.StatusDescription
-                    $ms = New-Object System.IO.MemoryStream
-                    $resp.GetResponseStream().CopyTo($ms)
-                    $enc = [System.Text.Encoding]::UTF8
-                    if ($resp.Headers['Content-Type'] -match 'charset=([^;]+)') {
-                        try { $enc = [System.Text.Encoding]::GetEncoding($Matches[1]) } catch {}
-                    }
-                    $errText = $enc.GetString($ms.ToArray())
+                    $errText = Get-HttpErrorBody -ErrorRecord $_
                 } catch {}
             }
             if (Test-Path $tmpFile) { Remove-Item $tmpFile -ErrorAction SilentlyContinue }
@@ -361,3 +355,53 @@ function Invoke-LoginWebRequest {
         }
     }
 }
+
+function Get-HttpErrorBody {
+    param(
+        [Parameter(Mandatory)]
+        $ErrorRecord
+    )
+
+    # Prefer ErrorDetails when present (PowerShell often stores response body there)
+    try {
+        if ($ErrorRecord.ErrorDetails -and $ErrorRecord.ErrorDetails.Message) {
+            return [string]$ErrorRecord.ErrorDetails.Message
+        }
+    } catch { }
+
+    # Fallback: try to read from WebException.Response stream (HttpWebResponse)
+    try {
+        $ex = $ErrorRecord.Exception
+        if ($ex -is [System.Net.WebException] -and $ex.Response) {
+            $resp = $ex.Response
+
+            $stream = $resp.GetResponseStream()
+            if ($stream) {
+                try {
+                    $ms = New-Object System.IO.MemoryStream
+                    try {
+                        $stream.CopyTo($ms)
+
+                        $enc = [System.Text.Encoding]::UTF8
+                        $ct = $resp.Headers['Content-Type']
+                        if ($ct -match 'charset=([^;]+)') {
+                            try { $enc = [System.Text.Encoding]::GetEncoding($Matches[1]) } catch { }
+                        }
+
+                        return $enc.GetString($ms.ToArray())
+                    }
+                    finally {
+                        $ms.Dispose()
+                    }
+                }
+                finally {
+                    $stream.Dispose()
+                }
+            }
+        }
+    } catch { }
+
+    # Last resort
+    return $ErrorRecord.ToString()
+}
+

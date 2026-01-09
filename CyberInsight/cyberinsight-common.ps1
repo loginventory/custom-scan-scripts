@@ -222,7 +222,62 @@ function Invoke-CIApi {
         $token = Get-CIAccessToken -Context $Context
         $hdr['Authorization'] = "{0} {1}" -f $Context.TokenType, $token
         $resp = Invoke-LoginWebRequest -Method $Method -Uri $uri -Headers $hdr -Body $Body -ProxyConfig $Context.Common.ProxyConfig -DebugFile $Context.Common.DebugFile
+    } 
+    elseif (-not $resp.IsSuccess -and ($resp.StatusCode -in 422))
+    {
+        $msg = Get-ApiValidationErrorMessage -ErrorPayload $resp.Body
+        Write-CommonDebug -Context $Context.Common -Message $msg
     }
 
     return $resp
+}
+
+function Get-ApiValidationErrorMessage {
+    param (
+        [Parameter(Mandatory)]
+        [object]$ErrorPayload
+    )
+
+    try {
+        # Convert JSON string to object if needed
+        if ($ErrorPayload -is [string]) {
+            $obj = $ErrorPayload | ConvertFrom-Json -ErrorAction Stop
+        }
+        else {
+            $obj = $ErrorPayload
+        }
+
+        if (-not $obj.detail) {
+            return "API error: Unknown validation error format."
+        }
+
+        $messages = foreach ($err in $obj.detail) {
+
+            # Build location string (e.g. body.items[0].name)
+            $location = if ($err.loc) {
+                ($err.loc | ForEach-Object {
+                    if ($_ -is [int]) { "[$_]" } else { ".$_" }
+                }) -join ""
+            }
+            else {
+                ""
+            }
+
+            $location = $location.TrimStart('.')
+
+            # Compose readable message
+            if ($location) {
+                "$($location): $($err.msg)"
+            }
+            else {
+                $err.msg
+            }
+        }
+
+        return $messages -join "; "
+    }
+    catch {
+        # Absolute fallback – never throw from an error formatter
+        return "API error: Failed to parse validation error response. $($_.Exception.Message)"
+    }
 }

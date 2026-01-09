@@ -217,19 +217,23 @@ function Start-CyberInsightPost {
                  -Path "threat-finder/submit" `
                  -Body $jsonBody
 
-        if (-not $resp.IsSuccess) {
-            throw "POST failed: HTTP $($resp.StatusCode) $($resp.StatusDescription)"
+        if (-not $resp.IsSuccess -and $resp.StatusCode -in 422) {
+            $msg = Get-ApiValidationErrorMessage -ErrorPayload $resp.Body
+            Notify -name "CyberInsight API" -itemName "-" -message $msg -category "Error" -state "Faulty" -itemResult "Error"
+        }
+        elseif (-not $resp.IsSuccess)
+        {
+            throw [System.Exception]::new("POST failed: HTTP $($resp.StatusCode) $($resp.StatusDescription)")
         }
 
         Write-CommonDebug -Context $ctx.Common -Message "POST done."
         Notify -name "CyberInsight API" -itemName "Server" -message "POST request successful. The data is now being examined for vulnerabilities in ThreatFinder." -category "Info" -itemResult "Ok" -state "Finished"
     }
     catch {
-        Write-CommonDebug -Context $ctx.Common -Message ("ERROR: {0}" -f $_)
-        try {
-            Invoke-ErrorNotification -Uri ($ctx.ApiUrl.TrimEnd('/') + "/threat-finder/submit") -ErrorResponse ([pscustomobject]@{ code="POST_FAILED"; message=$_.ToString() })
-        } catch {}
-        throw
+        Write-CommonDebug -Context $ctx.Common -Message $_.Exception.Message
+
+        $msg = $ctx.ApiUrl.TrimEnd('/') + "/threat-finder/submit " + $_.Exception.Message
+        Notify -name "CyberInsight API" -itemName "-" -message $msg -category "Error" -state "Faulty" -itemResult "Error"
     }
     finally {
         Write-CommonDebug -Context $ctx.Common -Message "POST finished."
