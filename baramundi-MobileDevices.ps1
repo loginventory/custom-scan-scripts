@@ -55,7 +55,7 @@ function Get-AndProcess-EndpointData {
     $allItems = @()
 
     # Set the initial page number
-    $pageNumber = 1
+    $pageNumber = 0
 
     # Construct the base URL for the API
     $baseUrl = $apiUrl + "/v2.0/$endpointType"
