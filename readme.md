@@ -23,7 +23,7 @@ Skript | Beschreibung | Was wird in LOGINventory erzeugt?
 [Device-Software-WMI.ps1](Device-Software-WMI.ps1)|Dieses Skript verwendet Windows Management Instrumentation (WMI), um Informationen über installierte Software von angegebenen Computern abzurufen. | Assets und Software-Pakete
 [IntuneDevices.ps1](IntuneDevices.ps1)|Dieses Skript verwendet Microsoft Graph, um Informationen zu mobilen Geräten (Smartphones & Tablets) und anderen Geräten aus Microsoft Intune abzurufen und diese als Assets in LOGINventory anzulegen. | Assets zu mobilen Geräten & anderen Geräten
 [jetbrains.ps1](jetbrains.ps1)|Dieses Skript ruft Informationen zu [JetBrains](https://www.jetbrains.com/) Produktlizenzen ab, indem es die vom Softwareherssteller JetBrains die Account API anfragt. | Cloud-Subscriptions und Lizenzen
-[CyberInsight.ps1](CyberInsight.ps1)|Dieses Skript dient als Schnittstelle zum Schwachstellenspezialisten [CyberInsight](https://cyber-insight.de/). Voraussetzungen: include\common.ps1, include\WebRequest.ps1, CyberInsight-Ordner | Schwachstellen-Analyse
+[SophosMDM-MobileDevices.ps1](SophosMDM-MobileDevices.ps1)|Dieses Skript verwendet die API von [Sophos Mobile](https://www.sophos.com/en-us/products/mobile.aspx), um Informationen zu mobilen Geräten (Smartphones & Tablets) aus dem Mobile Device Management abzurufen und diese als Assets in LOGINventory anzulegen. | Assets zu mobilen Geräten
 
 ## Vorraussetzungen
 
@@ -62,10 +62,12 @@ Die Datei include\WebRequest.ps1 enthält eine Funktion zum senden von WebReques
 ## Debug Umgebung (Visual Studio Code) ##
 
 Für Visual Studio Code gibt es jetzt im Unterordner zum Einen Workspacekonfigurationen für PS5 und PS7, zum Anderen Startbeispiele für die Parameterübergabe, so dass die Skripte alle komplett in VS-Code getestet und anschließend 1:1 vom Scanner gesteuert werden können.
-Über den Parameter 'DebugFile' wird das Schreiben aus dem Script in ein selbst anzugebendes txt-File ermöglicht. Über 'Write-CommonDebug' kann man aus dem Script heraus Debug-Informationen schreiben. Wenn der Parameter im Produktivmodus dann entfernt wird, werden die Kommandos einfach ignoriert.
+Über den Parameter `DebugFile` wird das Schreiben aus dem Script in ein selbst anzugebendes txt-File ermöglicht. Über `Write-CommonDebug` kann man aus dem Script heraus Debug-Informationen schreiben. Wenn der Parameter im Produktivmodus dann entfernt wird, werden die Kommandos einfach ignoriert.
 
+Um also beim Ausführen des Skripts eine Debug-Datei zu erzeugen, kann der Parameter `DebugFile` mit einem Pfad zu einer Textdatei übergeben werden, z.B. `C:/temp/mydebugfile.txt`. Alle Debug-Informationen, die mit `Write-CommonDebug` im Skript generiert werden, werden dann in diese Datei geschrieben. So können Sie die Ausführung des Skripts und die generierten Informationen einfach verfolgen und analysieren.
 
 **Beispiel Konfiguration im launch.json**
+
 ~~~
 {
     "name": "Download CyberInsight Data",
@@ -78,6 +80,7 @@ Für Visual Studio Code gibt es jetzt im Unterordner zum Einen Workspacekonfigur
     ]
 }
 ~~~
+
 dabei werden die Parameter 'dataDir' und 'version' später automatisch vom Scanner gesetzt - die Parameter in 'params' sind die, die in der Scandefinition definiert werden.
 
 ## Allgemeiner Skript-Header (Variante 1)
@@ -96,7 +99,7 @@ $scope = Init -encodedParams $parameter
 # End of default header ----------------------------------------------------------------------
 ```
 
-## Verwendung im Skript
+### Verwendung im Skript
 
 Nach dem Einbinden des Headers kann man das zurückgegebene `$scope`-Objekt im Skript nutzen, um auf verschiedene konfigurierte Werte und Einstellungen zuzugreifen:
 
@@ -148,7 +151,7 @@ param([string]$parameter = "")
 $ctx = New-CommonContext -Parameters $parameter -StartLabel 'STARTER'
 ~~~
 
-## Verwendung im Skript
+### Verwendung im Skript
 
 ~~~powershell
 $apiKey = $ctx.UserParameters.ApiKey
