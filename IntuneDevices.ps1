@@ -10,7 +10,7 @@ Die gesammelten Informationen werden zur Weiterverarbeitung durch den Data Servi
 Tjark-sys & LOGINVENTORY Team
 
 .VERSION
-2.0.0
+2.0.1
 
 .LICENSE
 Dieses Skript ist unter der MIT-Lizenz lizenziert. Vollständige Lizenzinformationen finden Sie unter [https://opensource.org/licenses/MIT](https://opensource.org/licenses/MIT)
@@ -136,6 +136,11 @@ foreach($device in $devices) {
     # Device MAC address
     $fromattedMac = ($device.wiFiMacAddress -replace "..", '$&:').TrimEnd(':').ToUpper()
     AddPropertyValue -name "LastInventory.Mac" -value $fromattedMac
+
+    # Set inventory method to "Stub" for non-mobile devices: When a Windows machine is scanned directly, the values read from Intune will not overwrite the values from the direct scan.
+    if($chassisType -ne "Mobile") {  
+        AddPropertyValue -name "LastInventory.Method" -value "Stub"
+    }
 
     # Device IMEI
     AddPropertyValue -name "MobileDeviceInfo.DeviceImei" -value $device.imei
