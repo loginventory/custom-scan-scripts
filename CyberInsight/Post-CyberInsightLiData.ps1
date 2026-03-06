@@ -111,9 +111,10 @@ function Start-CyberInsightPost {
                 
                 foreach ($sw in $deviceGroup.Group) {
                     # For Linux devices with no Publisher, fall back to Device.OperatingSystem.Name
+                    # (only when the column is present in the export query)
                     $publisher = if ($sw.Publisher) {
                         $sw.Publisher
-                    } elseif ($sw.Platform -eq 'Linux' -and $sw.'Device.OperatingSystem.Name') {
+                    } elseif ($sw.Platform -eq 'Linux' -and $sw.PSObject.Properties['Device.OperatingSystem.Name'] -and $sw.'Device.OperatingSystem.Name') {
                         $sw.'Device.OperatingSystem.Name'
                     } else {
                         ""
