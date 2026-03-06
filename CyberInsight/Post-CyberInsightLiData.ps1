@@ -212,7 +212,7 @@ function Start-CyberInsightPost {
             # Compose request body
             $jsonBodyObject = [PSCustomObject]@{
                 company_name = $ctx.CompanyName
-                devices      = $deviceObjects
+                devices      = @($deviceObjects)
             }
 
             # Robust: ensure we produce a JSON ARRAY payload (PS5 compatible)
