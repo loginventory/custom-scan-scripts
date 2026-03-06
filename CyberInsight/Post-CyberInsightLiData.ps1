@@ -20,6 +20,9 @@
     Notes:
       - Devices with more than one matching row in the LI export are included, exactly as in the original logic.
       - The working directory is restored after accessing the LI: drive (Push/Pop-Location).
+      - The LI export query (ExportQuery / "Vulnerability Export") must include the column
+        Device.OperatingSystem.Name. For Linux devices where SWPackage.Publisher is empty,
+        Device.OperatingSystem.Name is used as the publisher fallback.
 
     Requirements:
       - include\common.ps1           (context building, helpers, Notify, etc.)
@@ -107,8 +110,17 @@ function Start-CyberInsightPost {
                 $buckets = @{} # Key = rule index, Value = List<PSObject>
                 
                 foreach ($sw in $deviceGroup.Group) {
+                    # For Linux devices with no Publisher, fall back to Device.OperatingSystem.Name
+                    $publisher = if ($sw.Publisher) {
+                        $sw.Publisher
+                    } elseif ($sw.Platform -eq 'Linux' -and $sw.'Device.OperatingSystem.Name') {
+                        $sw.'Device.OperatingSystem.Name'
+                    } else {
+                        ""
+                    }
+
                     $item = [PSCustomObject]@{
-                        software_publisher = if ($sw.Publisher) { $sw.Publisher } else { "" }
+                        software_publisher = $publisher
                         software_name      = $sw.Name
                         software_version   = if ($sw.Version)   { $sw.Version   } else { "" }
                         software_metadata  = $sw.Platform
