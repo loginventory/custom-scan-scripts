@@ -37,18 +37,16 @@ param (
     [string]$parameter = ""
 )
 . (Join-Path -Path $PSScriptRoot -ChildPath "include\common.ps1")
+. (Join-Path -Path $PSScriptRoot -ChildPath "include\WebRequest.ps1")
 
-$scope = Init -encodedParams $parameter
+$ctx = New-CommonContext -Parameters $parameter -StartLabel 'Adobe'
 #end of default header ----------------------------------------------------------------------
-$filePath = "$($scope.DataDir)\adobe-$($scope.TimeStamp).inv"
+$filePath = "$($ctx.DataDir)\adobe-$($ctx.TimeStamp).inv"
 
-$organizationId = $scope.Parameters["organizationId"]
-$clientId = $scope.Parameters["clientId"]
-$clientSecret = $scope.Parameters["clientSecret"]
-$tenantName = $scope.Parameters["tenantName"]
-
-$env:DEBUG = "false"
-$DebugMode = [System.Convert]::ToBoolean($env:DEBUG)
+$organizationId = $ctx.UserParameters["organizationId"]
+$clientId = $ctx.UserParameters["clientId"]
+$clientSecret = $ctx.UserParameters["clientSecret"]
+$tenantName = $ctx.UserParameters["tenantName"]
 
 $loginUri = "https://ims-na1.adobelogin.com/ims/token/v3"
 $userManagementUri = "https://usermanagement.adobe.io/v2"
@@ -84,37 +82,22 @@ function Get-Access-Token {
     )
     Notify -name "Getting Access Token" -itemName "Getting Access Token" -itemResult "None" -message "Getting Access Token from $Uri" -category "Info" -state "None"
 
-    try {
-        $body = ConvertTo-UrlEncoded -Hashtable $FormData
-        $response = Invoke-RestMethod -Uri $Uri -Method Post -Body $body -Headers $Headers -ErrorAction Stop
-        Notify -name "Response Received" -itemName "Response Received" -itemResult "None" -message "Access Token Granted" -category "Info" -state "Finished"
-        return $response
-    }
-    catch {
-        Write-Error "Failed to get access token: $($_.Exception.Message)"
-        Write-Host "Status Code: $($_.Exception.Response.StatusCode)"
-        Write-Host "Response: $($_.Exception.Response.Content.ReadAsStringAsync().Result)"
+    $body = ConvertTo-UrlEncoded -Hashtable $FormData
+    $resp = Invoke-LoginWebRequest -Uri $Uri -Method POST -Body $body -Headers $Headers -ProxyConfig $ctx.ProxyConfig -DebugFile $ctx.DebugFile
+
+    if (-not $resp.IsSuccess) {
+        Write-Error "Failed to get access token: HTTP $($resp.StatusCode) $($resp.StatusDescription)"
         return $null
     }
+
+    Notify -name "Response Received" -itemName "Response Received" -itemResult "None" -message "Access Token Granted" -category "Info" -state "Finished"
+    return ($resp.Body | ConvertFrom-Json)
 }
 
 try {
+    $token = Get-Access-Token -Uri $loginUri -FormData $formData -Headers $headers
 
-    if ($DebugMode) {
-        Write-Host "Reading token from file"
-        $token = Get-Content -Raw -Path ".\data\token.json" | ConvertFrom-Json
-        Write-Host "Access Token: $($token.access_token)"
-        Write-Host "Expires In: $($token.expires_in)"
-        Write-Host "Token Type: $($token.token_type)"
-    }
-    else {
-        $token = Get-Access-Token -Uri $loginUri -FormData $formData -Headers $headers
-    }
-
-    if ($token) {
-        #some debug output possible here
-    }
-    else {
+    if (-not $token) {
         Write-Host "Failed to get token."
         exit 1
     }
@@ -144,22 +127,20 @@ $usersUri = "$userManagementUri/usermanagement/users/$organizationId/$userindex"
 Notify -name "Requesting Users and Groups" -itemName "Requesting Users and Groups" -itemResult "None" -message "Requesting Users and Groups from Adobe Management API" -category "Info" -state "None"
 
 while ($lastPageUsers -eq $false) {
-    try {
-        $response= Invoke-RestMethod -Uri $usersUri -Method Get -Headers $groupHeaders
-        $usersResponse += $response.users       
-    }
-    catch {
-        if ($_.Exception.Response.StatusCode -eq 429) {
-            $retryAfter = $_.Exception.Response.Headers.GetValues("Retry-After")[0]
-            $retryAfterMinutes = [math]::Ceiling($retryAfter / 60)
-            Notify -name "Request Failed" -itemName "Request Failed" -itemResult "Error" -message "Too many requests. Retry after $retryAfter seconds ($retryAfterMinutes minutes)." -category "Error" -state "Faulty"
-            
+    $resp = Invoke-LoginWebRequest -Uri $usersUri -Method GET -Headers $groupHeaders -ProxyConfig $ctx.ProxyConfig -DebugFile $ctx.DebugFile
+
+    if (-not $resp.IsSuccess) {
+        if ($resp.StatusCode -eq 429) {
+            $retryAfter = if ($resp.Headers -and $resp.Headers["Retry-After"]) { $resp.Headers["Retry-After"] } else { "unknown" }
+            Notify -name "Request Failed" -itemName "Request Failed" -itemResult "Error" -message "Too many requests. Retry after $retryAfter seconds." -category "Error" -state "Faulty"
             exit
         }
-        else {
-            throw $_
-        }
+        Write-Host "Fehler beim Abrufen der Users: HTTP $($resp.StatusCode) $($resp.StatusDescription)"
+        exit 1
     }
+
+    $response = $resp.Body | ConvertFrom-Json
+    $usersResponse += $response.users
     Notify -name "Got Users" -itemName "Got Users" -itemResult "None" -message "Got users from page $userindex" -category "Info" -state "None"
     $userindex++
     $usersUri = "$userManagementUri/usermanagement/users/$organizationId/$userindex"
@@ -169,21 +150,20 @@ while ($lastPageUsers -eq $false) {
 }
 
 while ($lastPageGroups -eq $false) {
-    try {
-        $response2= Invoke-RestMethod -Uri $orgGroupsUri -Method Get -Headers $groupHeaders
-        $groupsResponse += $response2.groups
-        }
-    catch {
-        if ($_.Exception.Response.StatusCode -eq 429) {
-            $retryAfter = $_.Exception.Response.Headers.GetValues("Retry-After")[0]
-            $retryAfterMinutes = [math]::Ceiling($retryAfter / 60)
-            Write-Host "Too many requests. Retry after $retryAfter seconds ($retryAfterMinutes minutes)."
+    $resp2 = Invoke-LoginWebRequest -Uri $orgGroupsUri -Method GET -Headers $groupHeaders -ProxyConfig $ctx.ProxyConfig -DebugFile $ctx.DebugFile
+
+    if (-not $resp2.IsSuccess) {
+        if ($resp2.StatusCode -eq 429) {
+            $retryAfter = if ($resp2.Headers -and $resp2.Headers["Retry-After"]) { $resp2.Headers["Retry-After"] } else { "unknown" }
+            Write-Host "Too many requests. Retry after $retryAfter seconds."
             exit
         }
-        else {
-            throw $_
-        }
+        Write-Host "Fehler beim Abrufen der Groups: HTTP $($resp2.StatusCode) $($resp2.StatusDescription)"
+        exit 1
     }
+
+    $response2 = $resp2.Body | ConvertFrom-Json
+    $groupsResponse += $response2.groups
     Notify -name "Got Groups" -itemName "Got Groups" -itemResult "None" -message "Got groups from page $groupindex" -category "Info" -state "None"
     $groupindex++
     $orgGroupsUri = "$userManagementUri/usermanagement/groups/$organizationId/$groupindex"
@@ -275,5 +255,5 @@ foreach ($user in $users) {
 }
 
 Notify -name "Writing Data" -itemName "AdobeApi" -message $filePath -category "Info" -state "Running"
-WriteInv -filePath $filePath -version $scope.Version
+WriteInv -filePath $filePath -version $ctx.Version
 Notify -name "Writing Data Done" -itemName "AdobeApi" -message "-" -category "Info" -state "Finished" -itemResult "Ok"

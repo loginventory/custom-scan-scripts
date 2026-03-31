@@ -29,12 +29,13 @@ param (
 )
 
 . (Join-Path -Path $PSScriptRoot -ChildPath "include\common.ps1")
+. (Join-Path -Path $PSScriptRoot -ChildPath "include\WebRequest.ps1")
 
-$scope = Init -encodedParams $parameter
+$ctx = New-CommonContext -Parameters $parameter -StartLabel 'JetBrains'
 #end of default header ----------------------------------------------------------------------
 
 
-$filePath = "$($scope.DataDir)\jetbrains-$($scope.TimeStamp).inv"
+$filePath = "$($ctx.DataDir)\jetbrains-$($ctx.TimeStamp).inv"
 
 function ToValidJson {
     param (
@@ -55,10 +56,10 @@ function ToValidJson {
     return $json
 }
 
-Notify -name "Datadir" -itemName "Data Directory" -message $($scope.DataDir) -category "Info" -state "None" -info "hallo"
+Notify -name "Datadir" -itemName "Data Directory" -message $($ctx.DataDir) -category "Info" -state "None" -info "hallo"
 
-$apiKey = $scope.Parameters["apiKey"]
-$customerCode = $scope.Parameters["customerCode"]
+$apiKey = $ctx.UserParameters["apiKey"]
+$customerCode = $ctx.UserParameters["customerCode"]
 $uri = "https://account.jetbrains.com/api/v1/customer/licenses"
 
 $headers = @{
@@ -68,8 +69,15 @@ $headers = @{
 }
 
 try {
-        
-    $response = Invoke-RestMethod -Uri $uri -Method Get -Headers $headers
+
+    $resp = Invoke-LoginWebRequest -Uri $uri -Method GET -Headers $headers -ProxyConfig $ctx.ProxyConfig -DebugFile $ctx.DebugFile
+
+    if (-not $resp.IsSuccess) {
+        Write-Host "Fehler beim Abrufen der JetBrains-Lizenzen: HTTP $($resp.StatusCode) $($resp.StatusDescription)"
+        exit 1
+    }
+
+    $response = $resp.Body | ConvertFrom-Json
 
     foreach ($item in $response) {                
         $product = ToValidJson -dataString $item.product | ConvertFrom-Json
@@ -105,7 +113,7 @@ try {
     }
 
     Notify -name "Writing Data" -itemName "JetApi" -message $filePath -category "Info" -state "Running"
-    WriteInv -filePath $filePath -version $scope.Version
+    WriteInv -filePath $filePath -version $ctx.Version
     Notify -name "Writing Data Done" -itemName "JetApi" -message $filePath -category "Info" -state "Finished" -itemResult "Ok"
 }
 catch {

@@ -33,13 +33,14 @@ param (
     [string]$parameter = ""
 )
 . (Join-Path -Path $PSScriptRoot -ChildPath "include\common.ps1")
+. (Join-Path -Path $PSScriptRoot -ChildPath "include\WebRequest.ps1")
 
-$scope = Init -encodedParams $parameter
+$ctx = New-CommonContext -Parameters $parameter -StartLabel 'Baramundi'
 #end of default header ----------------------------------------------------------------------
 
 # Variables for authentication
-$apiUrl = $scope.Parameters["apiUrl"]
-$apiKey = $scope.Parameters["apiKey"]
+$apiUrl = $ctx.UserParameters["apiUrl"]
+$apiKey = $ctx.UserParameters["apiKey"]
 
 # Build the headers hashtable
 $headers = @{
@@ -65,7 +66,14 @@ function Get-AndProcess-EndpointData {
         $currentUrl = $baseUrl + "?page=" + $pageNumber
 
         # Make the GET request
-        $response = Invoke-RestMethod -Uri $currentUrl -Method Get -Headers $headers
+        $resp = Invoke-LoginWebRequest -Uri $currentUrl -Method GET -Headers $headers -ProxyConfig $ctx.ProxyConfig -DebugFile $ctx.DebugFile
+
+        if (-not $resp.IsSuccess) {
+            Write-Host "Fehler beim Abrufen von ${endpointType}: HTTP $($resp.StatusCode) $($resp.StatusDescription)"
+            return
+        }
+
+        $response = $resp.Body | ConvertFrom-Json
 
         # Add the current page's data to the $allItems array
         $allItems += $response.data
@@ -137,5 +145,5 @@ function Get-AndProcess-EndpointData {
 Get-AndProcess-EndpointData -endpointType "IosEndpoints"
 Get-AndProcess-EndpointData -endpointType "AndroidEndpoints"
 
-$filePath = "$($scope.DataDir)\baramundi$($scope.TimeStamp).inv"
-WriteInv -filePath "$filePath" -version $scope.Version
+$filePath = "$($ctx.DataDir)\baramundi$($ctx.TimeStamp).inv"
+WriteInv -filePath "$filePath" -version $ctx.Version
