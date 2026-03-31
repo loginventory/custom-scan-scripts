@@ -36,23 +36,23 @@ param (
 
 . (Join-Path -Path $PSScriptRoot -ChildPath "include\common.ps1")
 
-$scope = Init -encodedParams $parameter
+$ctx = New-CommonContext -Parameters $parameter -StartLabel 'AzureAD'
 #end of default header ----------------------------------------------------------------------
 
-$filePath = "$($scope.DataDir)\azure-$($scope.TimeStamp).inv"
+$filePath = "$($ctx.DataDir)\azure-$($ctx.TimeStamp).inv"
 
 # Required Modules
 #Install-Module -Name Microsoft.Graph
 #Install-Module -Name Microsoft.Graph.Authentication
 #Install-Module -Name Microsoft.Graph.Users
 
-$namefilter = $scope.Parameters["namefilter"];
-$enabledAccountsOnly = $scope.Parameters["enabledAccountsOnly"] -eq "true";
-$validCompliantStatesOnly = $scope.Parameters["validCompliantStatesOnly"] -eq "true";
+$namefilter = $ctx.UserParameters["namefilter"];
+$enabledAccountsOnly = $ctx.UserParameters["enabledAccountsOnly"] -eq "true";
+$validCompliantStatesOnly = $ctx.UserParameters["validCompliantStatesOnly"] -eq "true";
 
-$TenantId = $scope.Parameters["tenantId"]
-$ClientId = $scope.Parameters["clientId"]
-$ClientSecret = $scope.Parameters["clientSecret"]
+$TenantId = $ctx.UserParameters["tenantId"]
+$ClientId = $ctx.UserParameters["clientId"]
+$ClientSecret = $ctx.UserParameters["clientSecret"]
 
 $securePassword = ConvertTo-SecureString -String $ClientSecret -AsPlainText -Force
 $pscredential = New-Object System.Management.Automation.PSCredential ($ClientId, $securePassword)
@@ -93,7 +93,7 @@ try {
         # Reactive archived assets
         AddPropertyValue -name "Archived" -value ""
         AddPropertyValue -name "Custom.Compliant" -value $compliantValue
-        AddPropertyValue -name "LastInventory.Timestamp" -value $scope.TimeStamp2
+        AddPropertyValue -name "LastInventory.Timestamp" -value $ctx.TimeStamp2
         AddPropertyValue -name "OperatingSystem.Name" -value $($device.OperatingSystem)
         AddPropertyValue -name "OperatingSystem.Version" -value $($device.OperatingSystemVersion)
                         
@@ -120,7 +120,7 @@ try {
     }
     
     Notify -name "Writing Data" -itemName "MSGRAPH" -message $filePath -category "Info" -state "None"        
-    WriteInv -filePath $filePath -version $scope.Version
+    WriteInv -filePath $filePath -version $ctx.Version
     Notify -name "Writing Data Done" -itemName "MSGRAPH" -message $filePath -category "Info" -state "Finished"
 }
 catch {

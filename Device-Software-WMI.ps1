@@ -26,10 +26,10 @@ param (
 
 . (Join-Path -Path $PSScriptRoot -ChildPath "include\common.ps1")
 
-$scope = Init -encodedParams $parameter
+$ctx = New-CommonContext -Parameters $parameter -StartLabel 'WMI'
 #end of default header ----------------------------------------------------------------------
 
-$filePath = "$($scope.DataDir)\wmisoft$($scope.TimeStamp).inv"
+$filePath = "$($ctx.DataDir)\wmisoft$($ctx.TimeStamp).inv"
 
 function Get-SoftwareInfo {
     param (
@@ -83,5 +83,5 @@ foreach ($computerName in $computers) {
 }
 
 Notify -name "WMI" -itemName "Writing Data $($elements.Count) Elements" -message $filePath -category "Info" -state "None"
-WriteInv -filePath $filePath -version $scope.Version
+WriteInv -filePath $filePath -version $ctx.Version
 Notify -name "WMI-" -itemName "Writing Data Done" -message $filePath -category "Info" -state "Finished"

@@ -52,13 +52,13 @@ param (
 
 . (Join-Path -Path $PSScriptRoot -ChildPath "include\common.ps1")
 
-$scope = Init -encodedParams $parameter
+$ctx = New-CommonContext -Parameters $parameter -StartLabel 'CSVImport'
 #end of default header ----------------------------------------------------------------------
 
-$filePath = "$($scope.DataDir)\userimport-$($scope.TimeStamp).inv"
+$filePath = "$($ctx.DataDir)\userimport-$($ctx.TimeStamp).inv"
 
 # Path to the CSV file
-$csvPath = $scope.Parameters["pathCSV"]
+$csvPath = $ctx.UserParameters["pathCSV"]
 
 # Import the CSV file and store it in a variable
 $users = Import-Csv -Path $csvPath -Delimiter ';'
@@ -109,7 +109,7 @@ try {
     }
     if ($countAddedUsers -gt 0){
         Notify -name "Writing Data" -itemName "CSV" -message $filePath -category "Info" -state "None" -itemResult "Ok"        
-        WriteInv -filePath $filePath -version $scope.Version
+        WriteInv -filePath $filePath -version $ctx.Version
         Notify -name "Writing Data Done" -itemName "CSV" -message $filePath -category "Info" -state "Finished" -itemResult "Ok"
     }
 }      

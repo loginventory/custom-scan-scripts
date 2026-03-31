@@ -34,14 +34,15 @@ param (
     [string]$parameter = ""
 )
 . (Join-Path -Path $PSScriptRoot -ChildPath "include\common.ps1")
+. (Join-Path -Path $PSScriptRoot -ChildPath "include\WebRequest.ps1")
 
-$scope = Init -encodedParams $parameter
+$ctx = New-CommonContext -Parameters $parameter -StartLabel 'AppTec360'
 #end of default header ----------------------------------------------------------------------
 
 # Variablen für Authentifizierung
-$apiUrl = $scope.Parameters["apiUrl"]
-$apiKey = $scope.Parameters["apiKey"]
-$privateKeyPath = $scope.Parameters["privateKeyPath"]
+$apiUrl = $ctx.UserParameters["apiUrl"]
+$apiKey = $ctx.UserParameters["apiKey"]
+$privateKeyPath = $ctx.UserParameters["privateKeyPath"]
 
 # Zeitstempel in Unix-Zeit
 $timeStamp = [Math]::Floor((Get-Date -UFormat %s))
@@ -75,7 +76,14 @@ $headersGetIDs = @{
     "signature" = $signatureGetIDs
 }
 
-$responseGetIDs = Invoke-RestMethod -Uri $apiUrl -Method Post -Headers $headersGetIDs -Body $requestDataGetIDs
+$respGetIDs = Invoke-LoginWebRequest -Method POST -Uri $apiUrl -Headers $headersGetIDs -Body $requestDataGetIDs -ProxyConfig $ctx.ProxyConfig -DebugFile $ctx.DebugFile
+
+if (-not $respGetIDs.IsSuccess) {
+    Write-Host "Fehler beim Abrufen der IDs: HTTP $($respGetIDs.StatusCode) $($respGetIDs.StatusDescription)"
+    return
+}
+
+$responseGetIDs = $respGetIDs.Body | ConvertFrom-Json
 
 if ($responseGetIDs.errors -and $responseGetIDs.errors.Count -gt 0) {
     Write-Host "Fehler beim Abrufen der IDs: $($responseGetIDs.errors | Out-String)"
@@ -101,7 +109,14 @@ $headersGetAssets = @{
     "signature" = $signatureGetAssets
 }
 
-$responseGetAssets = Invoke-RestMethod -Uri $apiUrl -Method Post -Headers $headersGetAssets -Body $requestDataGetAssets
+$respGetAssets = Invoke-LoginWebRequest -Method POST -Uri $apiUrl -Headers $headersGetAssets -Body $requestDataGetAssets -ProxyConfig $ctx.ProxyConfig -DebugFile $ctx.DebugFile
+
+if (-not $respGetAssets.IsSuccess) {
+    Write-Host "Fehler beim Abrufen der Gerätedaten: HTTP $($respGetAssets.StatusCode) $($respGetAssets.StatusDescription)"
+    return
+}
+
+$responseGetAssets = $respGetAssets.Body | ConvertFrom-Json
 
 if ($responseGetAssets.errors -and $responseGetAssets.errors.Count -gt 0) {
     Write-Host "Fehler beim Abrufen der Gerätedaten: $($responseGetAssets.errors | Out-String)"
@@ -224,5 +239,5 @@ foreach ($item in $responseGetAssets.result) {
         Notify -name $name -itemName "Inventarisierung" -message $name -category "Info" -state "Finished"
     }
 }
-$filePath = "$($scope.DataDir)\apptec$($scope.TimeStamp).inv"
-WriteInv -filePath "$filePath" -version $scope.Version
+$filePath = "$($ctx.DataDir)\apptec$($ctx.TimeStamp).inv"
+WriteInv -filePath "$filePath" -version $ctx.Version
