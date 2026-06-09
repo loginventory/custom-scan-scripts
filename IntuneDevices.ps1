@@ -16,7 +16,7 @@ Tjark-sys & LOGINVENTORY Team
 Dieses Skript ist unter der MIT-Lizenz lizenziert. Vollständige Lizenzinformationen finden Sie unter [https://opensource.org/licenses/MIT](https://opensource.org/licenses/MIT)
 
 .NOTES
-Das Skript erfordert die Installation der Microsoft.Graph PowerShell-Module und entsprechende Azure AD Berechtigungen:
+Das Skript erfordert die Installation der Microsoft.Graph PowerShell-Module und entsprechende Azure AD Berechtigungen: Install-Module Microsoft.Graph
 
 Insbesondere muss die verwendete App Registration berechtigt sein, Daten zu den in Intune verwalteten Geräten zu lesen.
 
