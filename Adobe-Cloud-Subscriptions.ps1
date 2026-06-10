@@ -27,7 +27,7 @@ You can use these credentials in the RemoteScanner under script-based inventory 
 - organizationId (e.g. "1234567890@AdobeOrg")
 - clientId (e.g. "1234567890abcdef1234567890abcdef")
 - clientSecret (e.g. "1234567890abcdef1234567890abcdef")
-- tenantName (e.g. "YourTenantName")
+- tenantName (e.g. "YourTenantName") // this information cannot be found online. Just specify a suitable name which is only shown inside LOGINventory.
 
 When specifying the values in the Remote Scanner, quotation marks can be omitted.
 #>
