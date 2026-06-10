@@ -172,7 +172,9 @@ while ($lastPageGroups -eq $false) {
     }
 }
 
-$licenseGroups = $groupsResponse | Where-Object { $_.licenseQuota } | ForEach-Object {
+# Only product profiles represent licenses. A USER_GROUP can also carry a licenseQuota
+# but has no productName, so require productName to avoid pulling in non-product groups.
+$licenseGroups = $groupsResponse | Where-Object { $_.licenseQuota -and $_.productName } | ForEach-Object {
     [PSCustomObject]@{
         GroupName    = $_.groupName
         ProductName  = $_.productName
@@ -197,6 +199,7 @@ $users = $usersResponse | Where-Object {
 }
 
 $licenseList = @()
+$pendingLicenses = @()   # collected during the user loop, emitted as top-level entities afterwards
 
 Notify -name "Information" -itemName "Information" -itemResult "None" -message "Creating user objects" -category "Info" -state "None"
 
@@ -214,12 +217,16 @@ foreach ($user in $users) {
             $productName = $matchingGroup.ProductName
         }
 
-        # Extract the ID at the end (after the dash) and trim spaces
-        if ($matchingGroup.ProductName -match "-\s*([A-Fa-f0-9]+)\)") {
-            $id = $matches[1].Trim()
+        # Unique identifier per product.
+        # NOTE: the hex value inside the productName, e.g. "(VIPMP,VIPMP - 508BDA399F1190AAC62A)",
+        # is the VIP/contract id and is IDENTICAL for every product in the organization. Using it
+        # as SkuId / Gulid makes all products collide onto a single record in LOGINventory (only one
+        # product name survives). The Adobe product-profile groupId is unique per product, so use it.
+        if ($matchingGroup.GroupId) {
+            $id = "$($matchingGroup.GroupId)"
         }
         else {
-            $id= "not available"
+            $id = "not available"
         }
 
         AddPropertyValue -name "CloudSubscription.Publisher" -value "Adobe"
@@ -230,28 +237,41 @@ foreach ($user in $users) {
         AddPropertyValue -name "CloudSubscription.SkuId" -value $id
         AddPropertyValue -name "CloudSubscription.SkuPartNumber" -value $matchingGroup.ProductName
         AddPropertyValue -name "CloudSubscription.ObjectId" -value $matchingGroup.GroupId
-        AddPropertyValue -name "CloudSubscription.Consumed" -value $matchingGroup.LicenseQuota
-        AddPropertyValue -name "CloudSubscription.Enabled" -value $matchingGroup.MemberCount
+        # Enabled = licenses available (Adobe licenseQuota); Consumed = licenses in use (Adobe memberCount)
+        AddPropertyValue -name "CloudSubscription.Enabled" -value $matchingGroup.LicenseQuota
+        AddPropertyValue -name "CloudSubscription.Consumed" -value $matchingGroup.MemberCount
         
-        # only add the license if it is not already in the list
+        # Collect the license for this product (deduplicated by full product name).
+        # IMPORTANT: do NOT create the ProductSubscriptionLicense entity here. NewEntity
+        # would switch the "current" entity, so the next group's CloudSubscription of the
+        # same user would be appended to the license instead of the user, producing invalid
+        # XML. Licenses are emitted as separate top-level entities after the user loop.
         if ($licenseList -notcontains $matchingGroup.ProductName) {
             $licenseList += $matchingGroup.ProductName
-        
-            NewEntity -name "ProductSubscriptionLicense"
-            AddPropertyValue -name "TenantId" -value $organizationId
-            AddPropertyValue -name "TenantName" -value $tenantName
-            $gulid = $id + "_" + $organizationId
-            AddPropertyValue -name "Gulid" -value $gulid
-            AddPropertyValue -name "Name{Editable:true}" -value $productName
-            AddPropertyValue -name "Manufacturer{Editable:true}" -value "Adobe"
-            AddPropertyValue -name "Amount{Editable:true}" -value $matchingGroup.LicenseQuota
-            AddPropertyValue -name "Multiplicator{Editable:true}" -value "1"
-            AddPropertyValue -name "EffectiveAmount{Editable:true}" -value $matchingGroup.LicenseQuota
-            AddPropertyValue -name "Method{Editable:true}" -value "2" # equals "Rent"
-            AddPropertyValue -name "LicenseType{Editable:true}" -value "0"
-            AddPropertyValue -name "Kind{Editable:true}" -value "0"
+            $pendingLicenses += [PSCustomObject]@{
+                ProductName  = $productName
+                Id           = $id
+                LicenseQuota = $matchingGroup.LicenseQuota
+            }
         }
     }
+}
+
+# Emit one ProductSubscriptionLicense per distinct product as its own top-level entity.
+foreach ($lic in $pendingLicenses) {
+    NewEntity -name "ProductSubscriptionLicense"
+    AddPropertyValue -name "TenantId" -value $organizationId
+    AddPropertyValue -name "TenantName" -value $tenantName
+    $gulid = $lic.Id + "_" + $organizationId
+    AddPropertyValue -name "Gulid" -value $gulid
+    AddPropertyValue -name "Name{Editable:true}" -value $lic.ProductName
+    AddPropertyValue -name "Manufacturer{Editable:true}" -value "Adobe"
+    AddPropertyValue -name "Amount{Editable:true}" -value $lic.LicenseQuota
+    AddPropertyValue -name "Multiplicator{Editable:true}" -value "1"
+    AddPropertyValue -name "EffectiveAmount{Editable:true}" -value $lic.LicenseQuota
+    AddPropertyValue -name "Method{Editable:true}" -value "2" # equals "Rent"
+    AddPropertyValue -name "LicenseType{Editable:true}" -value "0"
+    AddPropertyValue -name "Kind{Editable:true}" -value "0"
 }
 
 Notify -name "Writing Data" -itemName "AdobeApi" -message $filePath -category "Info" -state "Running"
