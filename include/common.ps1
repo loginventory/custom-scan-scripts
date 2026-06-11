@@ -128,7 +128,8 @@ function Init {
             ForEach-Object {
                 if (-not [string]::IsNullOrWhiteSpace($_) -and $_ -like '*=*') {
                     $key, $val = $_ -split '=', 2  # split only once
-                    $p[$key] = $val
+                    # Trim: in "@{a=b; c=d}" every key after the first carries a leading space
+                    $p[$key.Trim()] = $val.Trim()
                 }
             }
         }

@@ -293,7 +293,9 @@ function Invoke-LoginWebRequest {
             $bodyText = $enc.GetString($bytes)
 
             return [pscustomobject]@{
-                IsSuccess         = $true
+                # On PS7 SkipHttpErrorCheck is used, so 4xx/5xx also end up here
+                # and must not be reported as success.
+                IsSuccess         = ($statusCode -ge 200 -and $statusCode -lt 300)
                 StatusCode        = $statusCode
                 StatusDescription = $statusDesc
                 Headers           = $respHeaders
