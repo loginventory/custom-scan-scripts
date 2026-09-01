@@ -31,6 +31,17 @@
     <setting name="CyberInsightSyncQuery" serializeAs="String">
         <value>Vulnerability Assessment\All Vulnerabilities per Software Package</value>
     </setting>
+    <setting name="CyberInsightCompression" serializeAs="String">
+        <value>auto</value> <!-- gzip request compression for Action=Post: auto (default, gzip from 100 KB) | always | never -->
+    </setting>
+    <setting name="CyberInsightCompressionMinSizeKB" serializeAs="String">
+        <value>100</value> <!-- payload size in KB from which "auto" compresses (CyberInsight recommends 100 KB) -->
+    </setting>
+
+    Gzip request compression (see https://documentation-433337190849.europe-west3.run.app/gzip-compression/):
+    The CyberInsight gateway accepts at most 32 MB per request body and 150 MB decompressed.
+    Large inventories are therefore gzip-compressed before upload (Content-Encoding: gzip).
+    Only System.IO.Compression.GZipStream from the .NET runtime is used - no additional libraries required.
 .PARAMETER params
     Ensure "Action" parameter [Get/Post]
     Ensure "Engine" parameter [psc.exe]
