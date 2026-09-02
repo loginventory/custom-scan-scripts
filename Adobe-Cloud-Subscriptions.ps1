@@ -27,7 +27,7 @@ You can use these credentials in the RemoteScanner under script-based inventory 
 - organizationId (e.g. "1234567890@AdobeOrg")
 - clientId (e.g. "1234567890abcdef1234567890abcdef")
 - clientSecret (e.g. "1234567890abcdef1234567890abcdef")
-- tenantName (e.g. "YourTenantName")
+- tenantName (e.g. "YourTenantName") // this information cannot be found online. Just specify a suitable name which is only shown inside LOGINventory.
 
 When specifying the values in the Remote Scanner, quotation marks can be omitted.
 #>
@@ -37,18 +37,16 @@ param (
     [string]$parameter = ""
 )
 . (Join-Path -Path $PSScriptRoot -ChildPath "include\common.ps1")
+. (Join-Path -Path $PSScriptRoot -ChildPath "include\WebRequest.ps1")
 
-$scope = Init -encodedParams $parameter
+$ctx = New-CommonContext -Parameters $parameter -StartLabel 'Adobe'
 #end of default header ----------------------------------------------------------------------
-$filePath = "$($scope.DataDir)\adobe-$($scope.TimeStamp).inv"
+$filePath = "$($ctx.DataDir)\adobe-$($ctx.TimeStamp).inv"
 
-$organizationId = $scope.Parameters["organizationId"]
-$clientId = $scope.Parameters["clientId"]
-$clientSecret = $scope.Parameters["clientSecret"]
-$tenantName = $scope.Parameters["tenantName"]
-
-$env:DEBUG = "false"
-$DebugMode = [System.Convert]::ToBoolean($env:DEBUG)
+$organizationId = $ctx.UserParameters["organizationId"]
+$clientId = $ctx.UserParameters["clientId"]
+$clientSecret = $ctx.UserParameters["clientSecret"]
+$tenantName = $ctx.UserParameters["tenantName"]
 
 $loginUri = "https://ims-na1.adobelogin.com/ims/token/v3"
 $userManagementUri = "https://usermanagement.adobe.io/v2"
@@ -84,37 +82,22 @@ function Get-Access-Token {
     )
     Notify -name "Getting Access Token" -itemName "Getting Access Token" -itemResult "None" -message "Getting Access Token from $Uri" -category "Info" -state "None"
 
-    try {
-        $body = ConvertTo-UrlEncoded -Hashtable $FormData
-        $response = Invoke-RestMethod -Uri $Uri -Method Post -Body $body -Headers $Headers -ErrorAction Stop
-        Notify -name "Response Received" -itemName "Response Received" -itemResult "None" -message "Access Token Granted" -category "Info" -state "Finished"
-        return $response
-    }
-    catch {
-        Write-Error "Failed to get access token: $($_.Exception.Message)"
-        Write-Host "Status Code: $($_.Exception.Response.StatusCode)"
-        Write-Host "Response: $($_.Exception.Response.Content.ReadAsStringAsync().Result)"
+    $body = ConvertTo-UrlEncoded -Hashtable $FormData
+    $resp = Invoke-LoginWebRequest -Uri $Uri -Method POST -Body $body -Headers $Headers -ProxyConfig $ctx.ProxyConfig -DebugFile $ctx.DebugFile
+
+    if (-not $resp.IsSuccess) {
+        Write-Error "Failed to get access token: HTTP $($resp.StatusCode) $($resp.StatusDescription)"
         return $null
     }
+
+    Notify -name "Response Received" -itemName "Response Received" -itemResult "None" -message "Access Token Granted" -category "Info" -state "Finished"
+    return ($resp.Body | ConvertFrom-Json)
 }
 
 try {
+    $token = Get-Access-Token -Uri $loginUri -FormData $formData -Headers $headers
 
-    if ($DebugMode) {
-        Write-Host "Reading token from file"
-        $token = Get-Content -Raw -Path ".\data\token.json" | ConvertFrom-Json
-        Write-Host "Access Token: $($token.access_token)"
-        Write-Host "Expires In: $($token.expires_in)"
-        Write-Host "Token Type: $($token.token_type)"
-    }
-    else {
-        $token = Get-Access-Token -Uri $loginUri -FormData $formData -Headers $headers
-    }
-
-    if ($token) {
-        #some debug output possible here
-    }
-    else {
+    if (-not $token) {
         Write-Host "Failed to get token."
         exit 1
     }
@@ -144,22 +127,20 @@ $usersUri = "$userManagementUri/usermanagement/users/$organizationId/$userindex"
 Notify -name "Requesting Users and Groups" -itemName "Requesting Users and Groups" -itemResult "None" -message "Requesting Users and Groups from Adobe Management API" -category "Info" -state "None"
 
 while ($lastPageUsers -eq $false) {
-    try {
-        $response= Invoke-RestMethod -Uri $usersUri -Method Get -Headers $groupHeaders
-        $usersResponse += $response.users       
-    }
-    catch {
-        if ($_.Exception.Response.StatusCode -eq 429) {
-            $retryAfter = $_.Exception.Response.Headers.GetValues("Retry-After")[0]
-            $retryAfterMinutes = [math]::Ceiling($retryAfter / 60)
-            Notify -name "Request Failed" -itemName "Request Failed" -itemResult "Error" -message "Too many requests. Retry after $retryAfter seconds ($retryAfterMinutes minutes)." -category "Error" -state "Faulty"
-            
+    $resp = Invoke-LoginWebRequest -Uri $usersUri -Method GET -Headers $groupHeaders -ProxyConfig $ctx.ProxyConfig -DebugFile $ctx.DebugFile
+
+    if (-not $resp.IsSuccess) {
+        if ($resp.StatusCode -eq 429) {
+            $retryAfter = if ($resp.Headers -and $resp.Headers["Retry-After"]) { $resp.Headers["Retry-After"] } else { "unknown" }
+            Notify -name "Request Failed" -itemName "Request Failed" -itemResult "Error" -message "Too many requests. Retry after $retryAfter seconds." -category "Error" -state "Faulty"
             exit
         }
-        else {
-            throw $_
-        }
+        Write-Host "Fehler beim Abrufen der Users: HTTP $($resp.StatusCode) $($resp.StatusDescription)"
+        exit 1
     }
+
+    $response = $resp.Body | ConvertFrom-Json
+    $usersResponse += $response.users
     Notify -name "Got Users" -itemName "Got Users" -itemResult "None" -message "Got users from page $userindex" -category "Info" -state "None"
     $userindex++
     $usersUri = "$userManagementUri/usermanagement/users/$organizationId/$userindex"
@@ -169,21 +150,20 @@ while ($lastPageUsers -eq $false) {
 }
 
 while ($lastPageGroups -eq $false) {
-    try {
-        $response2= Invoke-RestMethod -Uri $orgGroupsUri -Method Get -Headers $groupHeaders
-        $groupsResponse += $response2.groups
-        }
-    catch {
-        if ($_.Exception.Response.StatusCode -eq 429) {
-            $retryAfter = $_.Exception.Response.Headers.GetValues("Retry-After")[0]
-            $retryAfterMinutes = [math]::Ceiling($retryAfter / 60)
-            Write-Host "Too many requests. Retry after $retryAfter seconds ($retryAfterMinutes minutes)."
+    $resp2 = Invoke-LoginWebRequest -Uri $orgGroupsUri -Method GET -Headers $groupHeaders -ProxyConfig $ctx.ProxyConfig -DebugFile $ctx.DebugFile
+
+    if (-not $resp2.IsSuccess) {
+        if ($resp2.StatusCode -eq 429) {
+            $retryAfter = if ($resp2.Headers -and $resp2.Headers["Retry-After"]) { $resp2.Headers["Retry-After"] } else { "unknown" }
+            Write-Host "Too many requests. Retry after $retryAfter seconds."
             exit
         }
-        else {
-            throw $_
-        }
+        Write-Host "Fehler beim Abrufen der Groups: HTTP $($resp2.StatusCode) $($resp2.StatusDescription)"
+        exit 1
     }
+
+    $response2 = $resp2.Body | ConvertFrom-Json
+    $groupsResponse += $response2.groups
     Notify -name "Got Groups" -itemName "Got Groups" -itemResult "None" -message "Got groups from page $groupindex" -category "Info" -state "None"
     $groupindex++
     $orgGroupsUri = "$userManagementUri/usermanagement/groups/$organizationId/$groupindex"
@@ -192,7 +172,9 @@ while ($lastPageGroups -eq $false) {
     }
 }
 
-$licenseGroups = $groupsResponse | Where-Object { $_.licenseQuota } | ForEach-Object {
+# Only product profiles represent licenses. A USER_GROUP can also carry a licenseQuota
+# but has no productName, so require productName to avoid pulling in non-product groups.
+$licenseGroups = $groupsResponse | Where-Object { $_.licenseQuota -and $_.productName } | ForEach-Object {
     [PSCustomObject]@{
         GroupName    = $_.groupName
         ProductName  = $_.productName
@@ -217,6 +199,7 @@ $users = $usersResponse | Where-Object {
 }
 
 $licenseList = @()
+$pendingLicenses = @()   # collected during the user loop, emitted as top-level entities afterwards
 
 Notify -name "Information" -itemName "Information" -itemResult "None" -message "Creating user objects" -category "Info" -state "None"
 
@@ -234,12 +217,16 @@ foreach ($user in $users) {
             $productName = $matchingGroup.ProductName
         }
 
-        # Extract the ID at the end (after the dash) and trim spaces
-        if ($matchingGroup.ProductName -match "-\s*([A-Fa-f0-9]+)\)") {
-            $id = $matches[1].Trim()
+        # Unique identifier per product.
+        # NOTE: the hex value inside the productName, e.g. "(VIPMP,VIPMP - 508BDA399F1190AAC62A)",
+        # is the VIP/contract id and is IDENTICAL for every product in the organization. Using it
+        # as SkuId / Gulid makes all products collide onto a single record in LOGINventory (only one
+        # product name survives). The Adobe product-profile groupId is unique per product, so use it.
+        if ($matchingGroup.GroupId) {
+            $id = "$($matchingGroup.GroupId)"
         }
         else {
-            $id= "not available"
+            $id = "not available"
         }
 
         AddPropertyValue -name "CloudSubscription.Publisher" -value "Adobe"
@@ -250,30 +237,43 @@ foreach ($user in $users) {
         AddPropertyValue -name "CloudSubscription.SkuId" -value $id
         AddPropertyValue -name "CloudSubscription.SkuPartNumber" -value $matchingGroup.ProductName
         AddPropertyValue -name "CloudSubscription.ObjectId" -value $matchingGroup.GroupId
-        AddPropertyValue -name "CloudSubscription.Consumed" -value $matchingGroup.LicenseQuota
-        AddPropertyValue -name "CloudSubscription.Enabled" -value $matchingGroup.MemberCount
+        # Enabled = licenses available (Adobe licenseQuota); Consumed = licenses in use (Adobe memberCount)
+        AddPropertyValue -name "CloudSubscription.Enabled" -value $matchingGroup.LicenseQuota
+        AddPropertyValue -name "CloudSubscription.Consumed" -value $matchingGroup.MemberCount
         
-        # only add the license if it is not already in the list
+        # Collect the license for this product (deduplicated by full product name).
+        # IMPORTANT: do NOT create the ProductSubscriptionLicense entity here. NewEntity
+        # would switch the "current" entity, so the next group's CloudSubscription of the
+        # same user would be appended to the license instead of the user, producing invalid
+        # XML. Licenses are emitted as separate top-level entities after the user loop.
         if ($licenseList -notcontains $matchingGroup.ProductName) {
             $licenseList += $matchingGroup.ProductName
-        
-            NewEntity -name "ProductSubscriptionLicense"
-            AddPropertyValue -name "TenantId" -value $organizationId
-            AddPropertyValue -name "TenantName" -value $tenantName
-            $gulid = $id + "_" + $organizationId
-            AddPropertyValue -name "Gulid" -value $gulid
-            AddPropertyValue -name "Name{Editable:true}" -value $productName
-            AddPropertyValue -name "Manufacturer{Editable:true}" -value "Adobe"
-            AddPropertyValue -name "Amount{Editable:true}" -value $matchingGroup.LicenseQuota
-            AddPropertyValue -name "Multiplicator{Editable:true}" -value "1"
-            AddPropertyValue -name "EffectiveAmount{Editable:true}" -value $matchingGroup.LicenseQuota
-            AddPropertyValue -name "Method{Editable:true}" -value "2" # equals "Rent"
-            AddPropertyValue -name "LicenseType{Editable:true}" -value "0"
-            AddPropertyValue -name "Kind{Editable:true}" -value "0"
+            $pendingLicenses += [PSCustomObject]@{
+                ProductName  = $productName
+                Id           = $id
+                LicenseQuota = $matchingGroup.LicenseQuota
+            }
         }
     }
 }
 
+# Emit one ProductSubscriptionLicense per distinct product as its own top-level entity.
+foreach ($lic in $pendingLicenses) {
+    NewEntity -name "ProductSubscriptionLicense"
+    AddPropertyValue -name "TenantId" -value $organizationId
+    AddPropertyValue -name "TenantName" -value $tenantName
+    $gulid = $lic.Id + "_" + $organizationId
+    AddPropertyValue -name "Gulid" -value $gulid
+    AddPropertyValue -name "Name{Editable:true}" -value $lic.ProductName
+    AddPropertyValue -name "Manufacturer{Editable:true}" -value "Adobe"
+    AddPropertyValue -name "Amount{Editable:true}" -value $lic.LicenseQuota
+    AddPropertyValue -name "Multiplicator{Editable:true}" -value "1"
+    AddPropertyValue -name "EffectiveAmount{Editable:true}" -value $lic.LicenseQuota
+    AddPropertyValue -name "Method{Editable:true}" -value "2" # equals "Rent"
+    AddPropertyValue -name "LicenseType{Editable:true}" -value "0"
+    AddPropertyValue -name "Kind{Editable:true}" -value "0"
+}
+
 Notify -name "Writing Data" -itemName "AdobeApi" -message $filePath -category "Info" -state "Running"
-WriteInv -filePath $filePath -version $scope.Version
+WriteInv -filePath $filePath -version $ctx.Version
 Notify -name "Writing Data Done" -itemName "AdobeApi" -message "-" -category "Info" -state "Finished" -itemResult "Ok"

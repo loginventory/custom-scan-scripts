@@ -1,0 +1,14 @@
+# Local credentials for debugging custom scan scripts - never commit
+*-creds.json
+creds.json
+secrets*.json
+
+# Raw API dumps / debug output produced while troubleshooting
+debug/
+*.debug.json
+*.debug.txt
+token.json
+data/token.json
+
+# Generated inventory files
+*.inv

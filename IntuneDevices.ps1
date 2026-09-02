@@ -16,7 +16,7 @@ Tjark-sys & LOGINVENTORY Team
 Dieses Skript ist unter der MIT-Lizenz lizenziert. Vollständige Lizenzinformationen finden Sie unter [https://opensource.org/licenses/MIT](https://opensource.org/licenses/MIT)
 
 .NOTES
-Das Skript erfordert die Installation der Microsoft.Graph PowerShell-Module und entsprechende Azure AD Berechtigungen:
+Das Skript erfordert die Installation der Microsoft.Graph PowerShell-Module und entsprechende Azure AD Berechtigungen: Install-Module Microsoft.Graph
 
 Insbesondere muss die verwendete App Registration berechtigt sein, Daten zu den in Intune verwalteten Geräten zu lesen.
 
@@ -39,15 +39,15 @@ param (
 )
 . (Join-Path -Path $PSScriptRoot -ChildPath "include\common.ps1")
 
-$scope = Init -encodedParams $parameter
+$ctx = New-CommonContext -Parameters $parameter -StartLabel 'Intune'
 #end of default header ----------------------------------------------------------------------
 
 
 # Variables for authentication
-$tenantId = $scope.Parameters["tenantId"]  # Azure AD Tenant ID
-$clientId = $scope.Parameters["clientId"]  # Azure AD App Registration Client ID
-$clientSecret = $scope.Parameters["clientSecret"]  # Azure AD App Registration Client Secret
-$scanOnlyMobileDevices = $scope.Parameters["scanOnlyMobileDevices"] # Boolean to determine if only mobile devices should be scanned (optional)
+$tenantId = $ctx.UserParameters["tenantId"]  # Azure AD Tenant ID
+$clientId = $ctx.UserParameters["clientId"]  # Azure AD App Registration Client ID
+$clientSecret = $ctx.UserParameters["clientSecret"]  # Azure AD App Registration Client Secret
+$scanOnlyMobileDevices = $ctx.UserParameters["scanOnlyMobileDevices"] # Boolean to determine if only mobile devices should be scanned (optional)
 
 # Convert the ClientSecret to a SecureString
 $clientSecretSecurePass = ConvertTo-SecureString -String $clientSecret -AsPlainText -Force
@@ -155,11 +155,11 @@ foreach($device in $devices) {
 }
 
 # Define file name and file path
-$fileName = "$($scope.TimeStamp)@Intune.inv"
-$filePath = "$($scope.DataDir)\$fileName"
+$fileName = "$($ctx.TimeStamp)@Intune.inv"
+$filePath = "$($ctx.DataDir)\$fileName"
 
 # Generate inventory file and save it in the data directory
-WriteInv -filePath "$filePath" -version $scope.Version
+WriteInv -filePath "$filePath" -version $ctx.Version
 
 # Notify LOGINventory Job Monitor
 Notify -name "Writing Data" -itemName "Inventory" -itemResult "Ok" -message "Intune" -category "Info" -state "Finished"

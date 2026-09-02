@@ -35,8 +35,9 @@ param (
     [string]$parameter = ""
 )
 . (Join-Path -Path $PSScriptRoot -ChildPath "include\common.ps1")
+. (Join-Path -Path $PSScriptRoot -ChildPath "include\WebRequest.ps1")
 
-$ctx = New-CommonContext -Parameters $parameter -StartLabel 'STARTER'
+$ctx = New-CommonContext -Parameters $parameter -StartLabel 'SophosMDM'
 # End of default header ----------------------------------------------------------------------
 
 
@@ -63,13 +64,21 @@ $tokenBody = @{
 }
 Write-CommonDebug -Context $ctx -Message "Fetching Access Token..."
 
-$tokenResponse = Invoke-RestMethod -Method Post -Uri $tokenUri `
-    -Body $tokenBody `
-    -ContentType "application/x-www-form-urlencoded"
+$tokenBodyParts = $tokenBody.GetEnumerator() | ForEach-Object { "$($_.Key)=$([uri]::EscapeDataString($_.Value))" }
+$tokenBodyEncoded = $tokenBodyParts -join "&"
+$tokenHeaders = @{ "Content-Type" = "application/x-www-form-urlencoded" }
 
+$tokenResp = Invoke-LoginWebRequest -Method POST -Uri $tokenUri -Body $tokenBodyEncoded -Headers $tokenHeaders -ProxyConfig $ctx.ProxyConfig -DebugFile $ctx.DebugFile
+
+if (-not $tokenResp.IsSuccess) {
+    Notify -name "Error" -itemName "Error retrieving Access Token" -message "Check if client ID and Secret are correct and if https://id.sophos.com/api/v2/oauth2/token can be reached" -category "Error" -state "Faulty" -ItemResult "Error"
+    throw "No access_token received. HTTP $($tokenResp.StatusCode) $($tokenResp.StatusDescription)"
+}
+
+$tokenResponse = $tokenResp.Body | ConvertFrom-Json
 $accessToken = $tokenResponse.access_token
 
-if (-not $accessToken) {    
+if (-not $accessToken) {
     Notify -name "Error" -itemName "Error retrieving Access Token" -message "Check if client ID and Secret are correct and if https://id.sophos.com/api/v2/oauth2/token can be reached" -category "Error" -state "Faulty" -ItemResult "Error"
     throw "No access_token received in response. Response: $($tokenResponse | ConvertTo-Json -Depth 5)"
 }
@@ -85,7 +94,13 @@ $baseHeaders = @{
 $whoamiUri = "https://api.central.sophos.com/whoami/v1"
 Write-CommonDebug -Context $ctx -Message "Calling whoami endpoint..."
 
-$whoami = Invoke-RestMethod -Method Get -Uri $whoamiUri -Headers $baseHeaders
+$whoamiResp = Invoke-LoginWebRequest -Method GET -Uri $whoamiUri -Headers $baseHeaders -ProxyConfig $ctx.ProxyConfig -DebugFile $ctx.DebugFile
+
+if (-not $whoamiResp.IsSuccess) {
+    throw "Whoami request failed: HTTP $($whoamiResp.StatusCode) $($whoamiResp.StatusDescription)"
+}
+
+$whoami = $whoamiResp.Body | ConvertFrom-Json
 
 $tenantId   = $whoami.id
 $dataRegion = $whoami.apiHosts.dataRegion.TrimEnd('/')
@@ -116,7 +131,14 @@ do {
 
     Write-CommonDebug -Context $ctx -Message "Fetching page $page $listUri"
 
-    $resp = Invoke-RestMethod -Method Get -Uri $listUri -Headers $mobileHeaders
+    $listResp = Invoke-LoginWebRequest -Method GET -Uri $listUri -Headers $mobileHeaders -ProxyConfig $ctx.ProxyConfig -DebugFile $ctx.DebugFile
+
+    if (-not $listResp.IsSuccess) {
+        Write-CommonDebug -Context $ctx -Message "Page ${page}: HTTP error $($listResp.StatusCode) -> breaking list loop."
+        break
+    }
+
+    $resp = $listResp.Body | ConvertFrom-Json
 
     if (-not $resp.items) {
         Write-CommonDebug -Context $ctx -Message "Page ${page}: no items -> breaking list loop."
@@ -160,45 +182,39 @@ foreach ($id in $allDeviceIds) {
     Notify -name "Getting Data" -itemName "Getting Data" -itemResult "None" "[$index/$total] - Getting device details" -category "Info" -state "Detecting"
     Write-CommonDebug -Context $ctx -Message ("[{0}/{1}] GET {2}" -f $index, $total, $id)
 
-    try {
-        $detail = Invoke-RestMethod -Method Get -Uri $detailUri -Headers $mobileHeaders
+    $detailResp = Invoke-LoginWebRequest -Method GET -Uri $detailUri -Headers $mobileHeaders -ProxyConfig $ctx.ProxyConfig -DebugFile $ctx.DebugFile
 
-        # Retrieve serial number separately as it is not included in standard details
-        $serialNumber = $null
-        # Slight delay to avoid rate limiting
-        Start-Sleep -Milliseconds 100
-        try {
-            $serialUri = "$dataRegion/mobile/v1/devices/${id}/properties?devicePropertyKey=device.serial-number"
-            $serialResponse = Invoke-RestMethod -Method Get -Uri $serialUri -Headers $mobileHeaders
-
-            if ($serialResponse.items) {
-                $serialItem = $serialResponse.items | Select-Object -First 1
-                $serialNumber = $serialItem.value
-            }
-        }
-        catch {
-            Write-CommonDebug -Context $ctx -Message "   -> Serial number for device ${id} could not be retrieved: $($_.Exception.Message)"
-
-            if ($_.ErrorDetails -and $_.ErrorDetails.Message) {
-                Write-CommonDebug -Context $ctx -Message "      Error details: $($_.ErrorDetails.Message)"
-            }
-        }
-
-        if ($serialNumber) {
-            $detail | Add-Member -NotePropertyName serialNumber -NotePropertyValue $serialNumber -Force
-        }
-
-        $fullDevices += $detail
-    }
-    catch {
-        Write-CommonDebug -Context $ctx -Message "   -> Error retrieving device ${id}: $($_.Exception.Message)"
-
-        # Try to read error message from response body if available
-        if ($_.ErrorDetails -and $_.ErrorDetails.Message) {
-            Write-CommonDebug -Context $ctx -Message "      Error details: $($_.ErrorDetails.Message)"
-        }
+    if (-not $detailResp.IsSuccess) {
+        Write-CommonDebug -Context $ctx -Message "   -> Error retrieving device ${id}: HTTP $($detailResp.StatusCode) $($detailResp.StatusDescription)"
         continue
     }
+
+    $detail = $detailResp.Body | ConvertFrom-Json
+
+    # Retrieve serial number separately as it is not included in standard details
+    $serialNumber = $null
+    # Slight delay to avoid rate limiting
+    Start-Sleep -Milliseconds 100
+
+    $serialUri = "$dataRegion/mobile/v1/devices/${id}/properties?devicePropertyKey=device.serial-number"
+    $serialResp = Invoke-LoginWebRequest -Method GET -Uri $serialUri -Headers $mobileHeaders -ProxyConfig $ctx.ProxyConfig -DebugFile $ctx.DebugFile
+
+    if ($serialResp.IsSuccess) {
+        $serialResponse = $serialResp.Body | ConvertFrom-Json
+        if ($serialResponse.items) {
+            $serialItem = $serialResponse.items | Select-Object -First 1
+            $serialNumber = $serialItem.value
+        }
+    }
+    else {
+        Write-CommonDebug -Context $ctx -Message "   -> Serial number for device ${id} could not be retrieved: HTTP $($serialResp.StatusCode) $($serialResp.StatusDescription)"
+    }
+
+    if ($serialNumber) {
+        $detail | Add-Member -NotePropertyName serialNumber -NotePropertyValue $serialNumber -Force
+    }
+
+    $fullDevices += $detail
 
     # Slight delay to avoid rate limiting
     Start-Sleep -Milliseconds 100
