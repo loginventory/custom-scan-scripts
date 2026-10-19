@@ -495,7 +495,17 @@ function WriteInv {
 
     $itemXml = ConvertTo-Xml -version $version -useDataNamespace $useDataNamespace
     $mxl = PostProcessXml -Xml $itemXml
-    $mxl | Out-File -FilePath $filePath
+    # Write to a temp file first and rename afterwards, so the LOGINventory data service
+    # never picks up a partially written .inv file. The ".tmp" suffix does not match its "*.inv" filter.
+    $tmpFilePath = "$filePath.tmp"
+    try {
+        $mxl | Out-File -FilePath $tmpFilePath
+        Move-Item -LiteralPath $tmpFilePath -Destination $filePath -Force -ErrorAction Stop
+    }
+    catch {
+        Remove-Item -LiteralPath $tmpFilePath -Force -ErrorAction SilentlyContinue
+        throw
+    }
     $lEntities.Clear() | Out-Null
 }
 
