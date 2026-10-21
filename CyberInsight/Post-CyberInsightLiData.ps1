@@ -11,9 +11,13 @@
       4) Query LI data (location from ExportQuery or a default path)
       5) Group by the configured device key property (default "Name")
       6) Build the request JSON and POST to /threat-finder/submit
+         (gzip-compressed for large payloads, see Send-CIThreatFinderData in cyberinsight-common.ps1)
 
     Key features:
       * Respects proxy and Accept-Language from Common/CI context
+      * Gzip request compression controlled by CyberInsightCompression (auto | always | never)
+        and CyberInsightCompressionMinSizeKB (default 100 KB); gateway limits: 32 MB request body,
+        150 MB decompressed (https://documentation-433337190849.europe-west3.run.app/gzip-compression/)
       * Logs via Write-CommonDebug when DebugFile is set
       * Emits standardized Notify() events for external log collectors
 
@@ -224,23 +228,37 @@ function Start-CyberInsightPost {
             Pop-Location
         }
 
-        # POST to ThreatFinder
-        $resp = Invoke-CIApi -Context $ctx `
-                 -Method POST `
-                 -Path "threat-finder/submit" `
-                 -Body $jsonBody
+        # POST to ThreatFinder.
+        # Large payloads are gzip-compressed (Content-Encoding: gzip) according to the
+        # CyberInsightCompression setting (auto | always | never); see Send-CIThreatFinderData.
+        Notify -name "CyberInsight API" -itemName "Server" -message "Uploading inventory data" -category "Info" -state "Executing" -itemResult "None"
+        $submit = Send-CIThreatFinderData -Context $ctx -JsonBody $jsonBody
+        $resp   = $submit.Response
+
+        # Distinct event names: events with the same -name overwrite each other in the scanner's job monitor.
+        # (Send-CIThreatFinderData already writes the warnings to the debug log.)
+        foreach ($warning in $submit.Warnings) {
+            Notify -name "Payload size" -itemName "CyberInsight API" -message $warning -category "Warning" -state "Finished" -itemResult "Ok"
+        }
 
         if (-not $resp.IsSuccess -and $resp.StatusCode -in 422) {
             $msg = Get-ApiValidationErrorMessage -ErrorPayload $resp.Body
+            Write-CommonDebug -Context $ctx.Common -Message ("POST rejected with HTTP 422: {0}" -f $msg)
             Notify -name "CyberInsight API" -itemName "-" -message $msg -category "Error" -state "Faulty" -itemResult "Error"
+            return
         }
         elseif (-not $resp.IsSuccess)
         {
-            throw [System.Exception]::new("POST failed: HTTP $($resp.StatusCode) $($resp.StatusDescription)")
+            throw [System.Exception]::new("POST failed: " + (Get-CISubmitErrorMessage -SubmitResult $submit))
         }
 
-        Write-CommonDebug -Context $ctx.Common -Message "POST done."
-        Notify -name "CyberInsight API" -itemName "Server" -message "POST request successful. The data is now being examined for vulnerabilities in ThreatFinder." -category "Info" -itemResult "Ok" -state "Finished"
+        if ($submit.FallbackUsed) {
+            $fallbackMsg = "The gzip-compressed upload was rejected by the API (HTTP {0}); the data was re-sent uncompressed. Check proxies/firewalls between the scanner and the CyberInsight gateway or set CyberInsightCompression=never." -f $submit.FallbackStatusCode
+            Notify -name "Compression fallback" -itemName "CyberInsight API" -message $fallbackMsg -category "Warning" -state "Finished" -itemResult "Ok"
+        }
+
+        Write-CommonDebug -Context $ctx.Common -Message ("POST done ({0})." -f $submit.Summary)
+        Notify -name "CyberInsight API" -itemName "Server" -message ("POST request successful ({0}). The data is now being examined for vulnerabilities in ThreatFinder." -f $submit.Summary) -category "Info" -itemResult "Ok" -state "Finished"
     }
     catch {
         Write-CommonDebug -Context $ctx.Common -Message $_.Exception.Message

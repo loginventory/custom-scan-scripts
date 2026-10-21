@@ -8,6 +8,9 @@
       - New-CIContext        : Build a CI context (wraps Common + CI settings; token cache)
       - Get-CIAccessToken    : Exchange API key for a bearer token (cached with expiry)
       - Invoke-CIApi         : Call CI API with auto token attach and one-time auth refresh
+      - Send-CIThreatFinderData : POST a ThreatFinder payload with optional gzip request compression,
+                                  size checks against the documented gateway limits and an uncompressed fallback
+      - Get-CISubmitErrorMessage : Human-readable error text for a failed ThreatFinder submission
 
     Key features:
       * Parameter precedence: explicit parameters > LOGINventory.config
@@ -15,6 +18,9 @@
       * Proxy support is inherited from Common context
       * Token caching with drift (refresh 60s before expiry)
       * One-time retry on 401/403/498/499 with token refresh
+      * Gzip request compression (Content-Encoding: gzip) for large ThreatFinder payloads,
+        controlled by CyberInsightCompression = auto | always | never (see gzip docs:
+        https://documentation-433337190849.europe-west3.run.app/gzip-compression/)
       * Debug logging via Write-CommonDebug (if DebugFile is configured)
 
     Requirements:
@@ -36,8 +42,8 @@ function Resolve-CI-EffConfig {
     .PARAMETER Common
         The Common context object returned by New-CommonContext.
     .OUTPUTS
-        PSCustomObject with BaseUrl, ApiKey, CompanyName, KeyProperty, Criticality,
-        ExportQuery, Language.
+        PSCustomObject with BaseUrl, ApiKey, CompanyName, KeyProperty, Criticality, ExportQuery, SyncQuery,
+        Language, Compression (auto | always | never), CompressionMinSizeKB.
     #>
     [CmdletBinding()]
     param(
@@ -49,7 +55,9 @@ function Resolve-CI-EffConfig {
     $keys = @(
         'CyberInsightEndpoint','CyberInsightApiKey','CyberInsightApiLanguage',
         'CyberInsightCompanyName','CyberInsightKeyProperty','CyberInsightCriticality',
-        'CyberInsightExportQuery', 'CyberInsightSyncQuery'
+        'CyberInsightExportQuery', 'CyberInsightSyncQuery',
+        'CyberInsightCompression', 'CyberInsightCompressionMinSizeKB',
+        'CyberInsightParallelism'
     )
 
     $fileCfg = @{}
@@ -66,15 +74,62 @@ function Resolve-CI-EffConfig {
     $syncQuery  = Get-EffectiveValue -Primary $Parameters -Fallback $fileCfg -Name 'CyberInsightSyncQuery' -As string -Default 'Vulnerability Assessment\All Vulnerabilities per Software Package'
    $language     = Get-EffectiveValue -Primary $Parameters -Fallback $fileCfg -Name 'CyberInsightApiLanguage' -Default 'en' -As string
 
+    # --- Gzip request compression for ThreatFinder uploads --------------------
+    #   CyberInsightCompression          : auto (default) = gzip when the JSON payload is >= CyberInsightCompressionMinSizeKB
+    #                                      always         = gzip every submission
+    #                                      never          = plain JSON (previous behaviour)
+    #   CyberInsightCompressionMinSizeKB : threshold for "auto" in KB (default 100 KB, as recommended by CyberInsight)
+    $compressionRaw = Get-EffectiveValue -Primary $Parameters -Fallback $fileCfg -Name 'CyberInsightCompression' -As string -Default 'auto'
+    $compression    = ConvertTo-CICompressionMode -Value $compressionRaw
+    if (([string]$compressionRaw).Trim().ToLowerInvariant() -notin 'auto','always','never') {
+        Write-CommonDebug -Context $Common -Message ("CyberInsightCompression='{0}' interpreted as '{1}' (valid: auto | always | never)" -f $compressionRaw, $compression)
+    }
+    $minSizeKbRaw   = Get-EffectiveValue -Primary $Parameters -Fallback $fileCfg -Name 'CyberInsightCompressionMinSizeKB' -As string -Default '100'
+    $minSizeKb      = 100
+    $parsedKb       = 0
+    if ([int]::TryParse(([string]$minSizeKbRaw).Trim(), [ref]$parsedKb) -and $parsedKb -ge 0) { $minSizeKb = $parsedKb }
+    else { Write-CommonDebug -Context $Common -Message ("CyberInsightCompressionMinSizeKB='{0}' is not a non-negative integer; using default {1} KB" -f $minSizeKbRaw, $minSizeKb) }
+
+    # --- Parallel workers for the GET run (per-software vulnerability + device requests) ---
+    #   CyberInsightParallelism : number of concurrent workers (default 4, range 1..32)
+    $parallelRaw = Get-EffectiveValue -Primary $Parameters -Fallback $fileCfg -Name 'CyberInsightParallelism' -As string -Default '4'
+    $parallelism = 4
+    $parsedPar   = 0
+    if ([int]::TryParse(([string]$parallelRaw).Trim(), [ref]$parsedPar) -and $parsedPar -ge 1) { $parallelism = [Math]::Min(32, $parsedPar) }
+    else { Write-CommonDebug -Context $Common -Message ("CyberInsightParallelism='{0}' is not a positive integer; using default {1}" -f $parallelRaw, $parallelism) }
+
     [pscustomobject]@{
-        BaseUrl     = $endpoint
-        ApiKey      = $apiKey
-        CompanyName = $company
-        KeyProperty = $keyProperty
-        Criticality = $criticality
-        ExportQuery = $exportQuery
-        SyncQuery   = $syncQuery
-        Language    = $language
+        BaseUrl              = $endpoint
+        ApiKey               = $apiKey
+        CompanyName          = $company
+        KeyProperty          = $keyProperty
+        Criticality          = $criticality
+        ExportQuery          = $exportQuery
+        SyncQuery            = $syncQuery
+        Language             = $language
+        Compression          = $compression
+        CompressionMinSizeKB = $minSizeKb
+        Parallelism          = $parallelism
+    }
+}
+
+function ConvertTo-CICompressionMode {
+    <#
+    .SYNOPSIS
+        Normalizes the CyberInsightCompression setting to 'auto' | 'always' | 'never'.
+    .DESCRIPTION
+        Accepts common synonyms (on/true/yes/1/gzip/force -> always; off/false/no/0/none -> never).
+        Empty or unknown values fall back to 'auto'.
+    #>
+    [CmdletBinding()]
+    param([AllowNull()][object]$Value)
+
+    $s = if ($null -ne $Value) { ([string]$Value).Trim().ToLowerInvariant() } else { '' }
+    switch -regex ($s) {
+        '^(auto|default)?$'                    { return 'auto' }
+        '^(always|on|true|yes|y|1|gzip|force)$' { return 'always' }
+        '^(never|off|false|no|n|0|none)$'       { return 'never' }
+        default                                 { return 'auto' }
     }
 }
 
@@ -110,6 +165,13 @@ function New-CIContext {
         SyncQuery     = $ci.SyncQuery
         Language      = $ci.Language
 
+        # ---- Gzip request compression (ThreatFinder upload) ----
+        Compression         = $ci.Compression                       # auto | always | never
+        CompressionMinBytes = [long]$ci.CompressionMinSizeKB * 1024  # threshold for "auto"
+
+        # ---- GET run: number of parallel workers ----
+        Parallelism   = [int]$ci.Parallelism
+
         # ---- Token cache ----
         AccessToken   = $null
         TokenType     = 'Bearer'
@@ -120,6 +182,7 @@ function New-CIContext {
         $proxyUrl = if ($ctx.Common.ProxyConfig.Url) { [string]$ctx.Common.ProxyConfig.Url } else { '<none>' }
         Write-CommonDebug -Context $ctx.Common -Message ("CI Effective: ApiUrl={0}; ProxyUrl={1}; Version={2}; CfgPath={3}" -f $ctx.ApiUrl,$proxyUrl,$ctx.Common.Version,$ctx.Common.ConfigPath)
         Write-CommonDebug -Context $ctx.Common -Message ("CI Params: Company={0}; KeyProp={1}; Language={2}; Criticality={3}" -f $ctx.CompanyName,$ctx.KeyProperty,$ctx.Language,$ctx.Criticality)
+        Write-CommonDebug -Context $ctx.Common -Message ("CI Compression: Mode={0}; MinSizeKB={1}" -f $ctx.Compression,$ci.CompressionMinSizeKB)
     }
 
     return $ctx
@@ -185,7 +248,10 @@ function Invoke-CIApi {
     .PARAMETER Headers
         Optional additional headers (hashtable). "Accept-Language" is added if missing.
     .PARAMETER Body
-        Optional request body string (e.g., JSON).
+        Optional request body: [string] (e.g., JSON) or [byte[]] (e.g., gzip-compressed JSON;
+        add 'Content-Encoding' = 'gzip' to Headers in that case).
+    .PARAMETER GzipBody
+        Compress the body with gzip before sending (adds "Content-Encoding: gzip").
     .OUTPUTS
         The structured response object returned by Invoke-LoginWebRequest.
     #>
@@ -195,7 +261,8 @@ function Invoke-CIApi {
         [Parameter(Mandatory=$true)][ValidateSet('GET','POST','PUT','PATCH','DELETE')][string]$Method,
         [Parameter(Mandatory=$true)][string]$Path,
         [hashtable]$Headers,
-        [string]$Body
+        [object]$Body,
+        [switch]$GzipBody
     )
 
     if (-not (HasValue $Context.ApiUrl)) { throw "API base URL (ApiUrl) is not set." }
@@ -212,7 +279,7 @@ function Invoke-CIApi {
     $token = Get-CIAccessToken -Context $Context
     $hdr['Authorization'] = "{0} {1}" -f $Context.TokenType, $token
 
-    $resp = Invoke-LoginWebRequest -Method $Method -Uri $uri -Headers $hdr -Body $Body -ProxyConfig $Context.Common.ProxyConfig -DebugFile $Context.Common.DebugFile
+    $resp = Invoke-LoginWebRequest -Method $Method -Uri $uri -Headers $hdr -Body $Body -GzipBody:$GzipBody -ProxyConfig $Context.Common.ProxyConfig -DebugFile $Context.Common.DebugFile
 
     # One-time refresh on auth failure
     if (-not $resp.IsSuccess -and ($resp.StatusCode -in 401,403,498,499)) {
@@ -221,8 +288,8 @@ function Invoke-CIApi {
         $Context.TokenExpiry = [DateTime]::MinValue
         $token = Get-CIAccessToken -Context $Context
         $hdr['Authorization'] = "{0} {1}" -f $Context.TokenType, $token
-        $resp = Invoke-LoginWebRequest -Method $Method -Uri $uri -Headers $hdr -Body $Body -ProxyConfig $Context.Common.ProxyConfig -DebugFile $Context.Common.DebugFile
-    } 
+        $resp = Invoke-LoginWebRequest -Method $Method -Uri $uri -Headers $hdr -Body $Body -GzipBody:$GzipBody -ProxyConfig $Context.Common.ProxyConfig -DebugFile $Context.Common.DebugFile
+    }
     elseif (-not $resp.IsSuccess -and ($resp.StatusCode -in 422))
     {
         $msg = Get-ApiValidationErrorMessage -ErrorPayload $resp.Body
@@ -256,7 +323,8 @@ function Get-ApiValidationErrorMessage {
             # Build location string (e.g. body.items[0].name)
             $location = if ($err.loc) {
                 ($err.loc | ForEach-Object {
-                    if ($_ -is [int]) { "[$_]" } else { ".$_" }
+                    # PS5 deserializes JSON numbers as [int], PS7 as [long]
+                    if ($_ -is [int] -or $_ -is [long]) { "[$_]" } else { ".$_" }
                 }) -join ""
             }
             else {
@@ -280,4 +348,395 @@ function Get-ApiValidationErrorMessage {
         # Absolute fallback – never throw from an error formatter
         return "API error: Failed to parse validation error response. $($_.Exception.Message)"
     }
+}
+
+function Format-CIBytes {
+    <#
+    .SYNOPSIS
+        Formats a byte count as a short, culture-invariant string (e.g. "12.3 MB", "512 KB", "80 B").
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory=$true)][long]$Bytes)
+
+    $inv = [System.Globalization.CultureInfo]::InvariantCulture
+    if ($Bytes -ge 1MB) { return [string]::Format($inv, '{0:0.#} MB', ($Bytes / 1MB)) }
+    if ($Bytes -ge 1KB) { return [string]::Format($inv, '{0:0.#} KB', ($Bytes / 1KB)) }
+    return [string]::Format($inv, '{0} B', $Bytes)
+}
+
+function Send-CIThreatFinderData {
+    <#
+    .SYNOPSIS
+        POSTs a ThreatFinder payload (JSON string) to /threat-finder/submit, applying gzip request
+        compression according to Context.Compression (auto | always | never).
+    .DESCRIPTION
+        Compression modes (setting CyberInsightCompression):
+          auto   : gzip when the UTF-8 payload is >= Context.CompressionMinBytes (CyberInsightCompressionMinSizeKB, default 100 KB)
+          always : gzip every submission
+          never  : plain JSON (behaviour before gzip support)
+        Gzip requests are sent with "Content-Encoding: gzip" and "Content-Type: application/json" exactly as
+        documented at https://documentation-433337190849.europe-west3.run.app/gzip-compression/.
+        Documented gateway limits: 32 MB per request body (compressed or plain), 150 MB decompressed.
+        The payload is checked against these limits before sending; violations are returned as Warnings
+        (the request is still sent - the gateway remains the authority).
+        Fallback: in "auto" mode, if the gzip request itself is rejected with HTTP 400 or 415 (e.g. a proxy
+        tampering with Content-Encoding) and the plain payload still fits into the request limit, the
+        submission is retried once uncompressed. "always" never falls back.
+    .PARAMETER Context
+        CI context built by New-CIContext.
+    .PARAMETER JsonBody
+        The complete JSON document to submit (UTF-8 encoded on the wire).
+    .PARAMETER Path
+        Relative API path (default: threat-finder/submit).
+    .OUTPUTS
+        PSCustomObject: Response (Invoke-LoginWebRequest result), CompressionMode, CompressionUsed, FallbackUsed,
+        FallbackStatusCode, PayloadBytes (uncompressed UTF-8 size), SentBytes (bytes on the wire), CompressionMs,
+        Warnings (string[]), Summary (short text for logs/notifications).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)]$Context,
+        [Parameter(Mandatory=$true)][AllowEmptyString()][string]$JsonBody,
+        [string]$Path = 'threat-finder/submit'
+    )
+
+    # Documented gateway limits (https://documentation-433337190849.europe-west3.run.app/gzip-compression/)
+    $maxRequestBytes      = 32MB    # request body on the wire (compressed or plain)
+    $maxDecompressedBytes = 150MB   # decompressed payload
+
+    $payloadBytes = [System.Text.Encoding]::UTF8.GetBytes($JsonBody)
+    $payloadLen   = [long]$payloadBytes.Length
+
+    $mode = 'auto'
+    if (HasValue $Context.Compression) { $mode = ([string]$Context.Compression).Trim().ToLowerInvariant() }
+    $minBytes = [long]100KB
+    if ($null -ne $Context.CompressionMinBytes) { $minBytes = [long]$Context.CompressionMinBytes }
+
+    $useGzip = $false
+    switch ($mode) {
+        'always' { $useGzip = $true }
+        'never'  { $useGzip = $false }
+        default  { $useGzip = ($payloadLen -ge $minBytes) }
+    }
+
+    $body    = $null
+    $headers = @{}
+    $sentLen = $payloadLen
+    $gzipMs  = [long]0
+    if ($useGzip) {
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        $body = ConvertTo-GzipBytes -InputObject $payloadBytes
+        $sw.Stop()
+        $gzipMs  = $sw.ElapsedMilliseconds
+        $sentLen = [long]$body.Length
+        $headers['Content-Encoding'] = 'gzip'
+        $headers['Content-Type']     = 'application/json'   # exactly as documented for gzip requests
+    }
+    else {
+        $body = $JsonBody
+    }
+
+    # Pre-flight checks against the documented limits (informational; the request is still sent)
+    $warnings = New-Object System.Collections.Generic.List[string]
+    if ($sentLen -gt $maxRequestBytes) {
+        if ($useGzip) {
+            $warnings.Add(("The gzip-compressed payload ({0}) exceeds the documented request limit of {1}; the API will most likely respond with HTTP 413. The inventory is too large for a single submission." -f (Format-CIBytes $sentLen), (Format-CIBytes $maxRequestBytes)))
+        }
+        else {
+            $warnings.Add(("The uncompressed payload ({0}) exceeds the documented request limit of {1}; the API will most likely respond with HTTP 413. Set CyberInsightCompression=auto (default) or always to enable gzip compression." -f (Format-CIBytes $sentLen), (Format-CIBytes $maxRequestBytes)))
+        }
+    }
+    if ($useGzip -and $payloadLen -gt $maxDecompressedBytes) {
+        $warnings.Add(("The uncompressed payload ({0}) exceeds the documented decompressed-size limit of {1}; the API will most likely respond with HTTP 413." -f (Format-CIBytes $payloadLen), (Format-CIBytes $maxDecompressedBytes)))
+    }
+
+    Write-CommonDebug -Context $Context.Common -Message ("ThreatFinder submit: mode={0}; gzip={1}; payload={2} ({3} bytes); sent={4} ({5} bytes); gzipTime={6} ms" -f $mode, $useGzip, (Format-CIBytes $payloadLen), $payloadLen, (Format-CIBytes $sentLen), $sentLen, $gzipMs)
+    foreach ($w in $warnings) { Write-CommonDebug -Context $Context.Common -Message ("WARNING: {0}" -f $w) }
+
+    $resp = Invoke-CIApi -Context $Context -Method POST -Path $Path -Headers $headers -Body $body
+
+    # Fallback: "auto" mode only - if the gzip request itself was rejected and the plain payload fits, retry once uncompressed.
+    # Triggers on 400/415 (gateway: invalid/unsupported encoding) and on a 422 whose detail is a JSON decode error
+    # (a proxy that strips Content-Encoding but forwards the gzip bytes makes the gateway parse binary data as JSON).
+    $fallbackUsed   = $false
+    $fallbackStatus = 0
+    $gzipRejected = $false
+    if ($useGzip -and $mode -ne 'always' -and -not $resp.IsSuccess) {
+        if ($resp.StatusCode -in 400,415) { $gzipRejected = $true }
+        elseif ($resp.StatusCode -eq 422 -and $resp.Body -and ([string]$resp.Body -match '(?i)json[_ ]?(invalid|decode)|invalid json|expecting value')) { $gzipRejected = $true }
+    }
+    if ($gzipRejected) {
+        if ($payloadLen -le $maxRequestBytes) {
+            $fallbackStatus = [int]$resp.StatusCode
+            Write-CommonDebug -Context $Context.Common -Message ("gzip submission rejected with HTTP {0} {1}; retrying once uncompressed ({2})" -f $resp.StatusCode, $resp.StatusDescription, (Format-CIBytes $payloadLen))
+            $fallbackUsed = $true
+            $useGzip      = $false
+            $sentLen      = $payloadLen
+            $resp = Invoke-CIApi -Context $Context -Method POST -Path $Path -Body $JsonBody
+        }
+        else {
+            Write-CommonDebug -Context $Context.Common -Message ("gzip submission rejected with HTTP {0}; uncompressed fallback skipped because the plain payload ({1}) exceeds the request limit of {2}" -f $resp.StatusCode, (Format-CIBytes $payloadLen), (Format-CIBytes $maxRequestBytes))
+        }
+    }
+
+    $inv = [System.Globalization.CultureInfo]::InvariantCulture
+    if ($useGzip) {
+        $ratio   = if ($sentLen -gt 0) { ($payloadLen / $sentLen).ToString('0.0', $inv) } else { '-' }
+        $summary = "payload {0}, sent {1} gzip-compressed (ratio {2}:1, {3} ms)" -f (Format-CIBytes $payloadLen), (Format-CIBytes $sentLen), $ratio, $gzipMs
+    }
+    elseif ($fallbackUsed) {
+        $summary = "payload {0}, sent uncompressed after gzip fallback (HTTP {1})" -f (Format-CIBytes $payloadLen), $fallbackStatus
+    }
+    else {
+        $summary = "payload {0}, sent uncompressed" -f (Format-CIBytes $payloadLen)
+    }
+
+    return [pscustomobject]@{
+        Response           = $resp
+        CompressionMode    = $mode
+        CompressionUsed    = $useGzip
+        FallbackUsed       = $fallbackUsed
+        FallbackStatusCode = $fallbackStatus
+        PayloadBytes       = $payloadLen
+        SentBytes          = $sentLen
+        CompressionMs      = $gzipMs
+        Warnings           = @($warnings)
+        Summary            = $summary
+    }
+}
+
+function Get-CISubmitErrorMessage {
+    <#
+    .SYNOPSIS
+        Builds a human-readable error message for a failed Send-CIThreatFinderData result,
+        including the documented gateway limits and hints for gzip-related failures.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory=$true)]$SubmitResult)
+
+    $resp = $SubmitResult.Response
+    $code = 0
+    try { $code = [int]$resp.StatusCode } catch { $code = 0 }
+    $desc = ([string]$resp.StatusDescription).Trim()
+    $mode = [string]$SubmitResult.CompressionMode
+
+    # Prefer the API's "detail" text when the body is JSON ({"detail": "..."}), else a trimmed, single-line body preview
+    # (Notify() events must stay on one line).
+    $detail = ''
+    if ($resp.Body) {
+        $detail = [string]$resp.Body
+        try {
+            $obj = $detail | ConvertFrom-Json -ErrorAction Stop
+            if ($obj -and $obj.PSObject.Properties['detail'] -and ($obj.detail -is [string])) { $detail = [string]$obj.detail }
+        } catch { }
+        $detail = ($detail -replace '\s+', ' ').Trim().TrimEnd('.')
+        if ($detail.Length -gt 300) { $detail = $detail.Substring(0, 300) + '...' }
+    }
+    $head = "HTTP {0} {1}" -f $code, $desc
+    if ($detail) { $head += ": " + $detail }
+
+    $sizes = if ($SubmitResult.CompressionUsed) {
+        "sent {0} gzip-compressed, {1} uncompressed" -f (Format-CIBytes $SubmitResult.SentBytes), (Format-CIBytes $SubmitResult.PayloadBytes)
+    } else {
+        "sent {0} uncompressed" -f (Format-CIBytes $SubmitResult.SentBytes)
+    }
+    if ($SubmitResult.FallbackUsed) {
+        $sizes += "; the gzip-compressed request was rejected first with HTTP {0}" -f $SubmitResult.FallbackStatusCode
+    }
+
+    # Hint on how to get compression, depending on why the request was uncompressed
+    $enableHint = switch ($mode) {
+        'never' { " Set CyberInsightCompression=auto (default) or always to enable gzip compression." }
+        'auto'  { if ($SubmitResult.FallbackUsed) { '' } else { " The payload was below CyberInsightCompressionMinSizeKB; lower the threshold or set CyberInsightCompression=always." } }
+        default { '' }
+    }
+
+    switch ($code) {
+        413 {
+            $hint = if ($SubmitResult.CompressionUsed) { " The inventory is too large for a single submission even with gzip compression." } else { $enableHint }
+            return ("{0}. Documented limits: 32 MB request body, 150 MB decompressed; {1}.{2}" -f $head, $sizes, $hint)
+        }
+        408 {
+            return ("{0}. The upload ({1}) was too slow for the gateway (5 s per chunk / 300 s total); check bandwidth and proxies.{2}" -f $head, $sizes, $enableHint)
+        }
+        { $_ -in 400,415,422 } {
+            $hint = if ($SubmitResult.CompressionUsed) {
+                " The gzip-compressed request was rejected - check whether a proxy/firewall alters the request (Content-Encoding) or set CyberInsightCompression=never."
+            } else { '' }
+            return ("{0} ({1}).{2}" -f $head, $sizes, $hint)
+        }
+        0 {
+            $hint = if ($SubmitResult.CompressionUsed) { " The gzip-compressed upload failed at transport level; if this started with compression enabled, try CyberInsightCompression=never." } else { '' }
+            return ("{0} ({1}).{2}" -f $head, $sizes, $hint)
+        }
+        default {
+            return ("{0} ({1})" -f $head, $sizes)
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------
+#  GET run helpers: retrying API calls, streaming .inv writer, worker pool
+# ---------------------------------------------------------------------------
+
+function Invoke-CIApiRetry {
+    <#
+    .SYNOPSIS
+        GET against the CyberInsight API with retries for transient failures.
+    .DESCRIPTION
+        Retries on network errors (HTTP 0, e.g. DNS/timeouts, also during token acquisition),
+        408/425/429 and 5xx with exponential backoff (5s, 10s, 20s, 40s, 60s + jitter).
+        Non-transient responses (other 4xx) are returned to the caller unchanged.
+        After the last attempt the last response is returned (or the last exception is thrown).
+    .PARAMETER LogSink
+        Optional list that receives one line per retry (used by worker runspaces that have no debug file).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)]$Context,
+        [Parameter(Mandatory=$true)][string]$Path,
+        [int]$MaxAttempts = 6,
+        [System.Collections.IList]$LogSink
+    )
+
+    $attempt = 0
+    while ($true) {
+        $attempt++
+        $resp = $null
+        $err  = $null
+        try { $resp = Invoke-CIApi -Context $Context -Method GET -Path $Path }
+        catch { $err = [string]$_.Exception.Message }
+
+        if ($null -ne $resp -and $resp.IsSuccess) { return $resp }
+
+        $code = if ($null -ne $resp) { [int]$resp.StatusCode } else { 0 }
+        $transient = $false
+        if ($null -ne $resp) {
+            $transient = ($code -eq 0 -or $code -eq 408 -or $code -eq 425 -or $code -eq 429 -or ($code -ge 500 -and $code -le 599))
+        }
+        else {
+            # Exception (e.g. token request): "HTTP 0 ..." or no HTTP code = network problem; other 4xx = permanent
+            $transient = ($err -notmatch 'HTTP (4\d\d)') -or ($err -match 'HTTP (408|425|429)')
+        }
+
+        if (-not $transient -or $attempt -ge $MaxAttempts) {
+            if ($null -ne $resp) { return $resp }
+            throw $err
+        }
+
+        $delay = [Math]::Min(60, 5 * [Math]::Pow(2, $attempt - 1)) + (Get-Random -Minimum 0 -Maximum 3)
+        $what = if ($null -ne $resp) { "HTTP $code $($resp.StatusDescription)" } else { $err }
+        $msg = "RETRY {0}/{1} in {2}s after {3} ({4})" -f $attempt, $MaxAttempts, $delay, $what, $Path
+        if ($LogSink) { [void]$LogSink.Add($msg) } else { Write-CommonDebug -Context $Context.Common -Message $msg }
+        Start-Sleep -Seconds $delay
+    }
+}
+
+function ConvertTo-CIXmlText {
+    <#
+    .SYNOPSIS
+        Trims a value and strips characters that are illegal in XML 1.0 (control chars, lone surrogates).
+    #>
+    param([AllowNull()][object]$Value)
+
+    if ($null -eq $Value) { return '' }
+    if (-not (Get-Variable -Name CIBadXmlRegex -Scope Script -ErrorAction SilentlyContinue)) {
+        $script:CIBadXmlRegex = New-Object System.Text.RegularExpressions.Regex('[#x00-#x08#x0B#x0C#x0E-#x1F#uFFFE#uFFFF]|[#uD800-#uDBFF](?![#uDC00-#uDFFF])|(?<![#uD800-#uDBFF])[#uDC00-#uDFFF]'.Replace('#', '\'))
+    }
+    return $script:CIBadXmlRegex.Replace(([string]$Value), '').Trim()
+}
+
+function Open-CIInv {
+    <#
+    .SYNOPSIS
+        Opens a streaming .inv writer (<file>.tmp) and writes the Inventory envelope plus the opening tag of one entity.
+    .DESCRIPTION
+        Produces the same XML structure as NewEntity/AddPropertyValue/WriteInv, but streams straight to disk
+        (UTF-8) instead of building an entity list, a string and two XmlDocuments in memory.
+        Write child elements with $handle.Writer; finish with Close-CIInv (renames .tmp -> .inv) or
+        Close-CIInv -Abort (deletes the .tmp file).
+    #>
+    param(
+        [Parameter(Mandatory=$true)][string]$FilePath,
+        [Parameter(Mandatory=$true)][string]$Version,
+        [Parameter(Mandatory=$true)][string]$Entity
+    )
+
+    $tmp = "$FilePath.tmp"
+    $settings = New-Object System.Xml.XmlWriterSettings
+    $settings.Indent = $false
+    $settings.OmitXmlDeclaration = $true
+    $settings.CloseOutput = $true
+    $settings.Encoding = New-Object System.Text.UTF8Encoding($true)
+
+    $fs = New-Object System.IO.FileStream($tmp, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None, 65536)
+    try {
+        $w = [System.Xml.XmlWriter]::Create($fs, $settings)
+        $nsVersion = ($Version -split '\.')[0] + '.0'
+        $w.WriteStartElement('Inventory', 'http://www.loginventory.com/schemas/LOGINventory/data')
+        $w.WriteAttributeString('Version', $Version)
+        $w.WriteAttributeString('Agent', 'PostProcessXml')
+        $w.WriteAttributeString('Timestamp', (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ'))
+        $w.WriteStartElement($Entity, ('http://www.loginventory.com/schemas/LOGINventory/data/{0}/LogInfo' -f $nsVersion))
+        $w.WriteAttributeString('ClearMissingCustomProperties', 'false')
+    }
+    catch {
+        $fs.Dispose()
+        Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+        throw
+    }
+    return [pscustomobject]@{ Writer = $w; Tmp = $tmp; Path = $FilePath }
+}
+
+function Close-CIInv {
+    <#
+    .SYNOPSIS
+        Finishes a writer from Open-CIInv. Renames <file>.tmp to <file> so the LOGINventory data service
+        never sees partial files; with -Abort the .tmp file is deleted instead.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]$Handle,
+        [switch]$Abort
+    )
+
+    try {
+        if (-not $Abort) {
+            $Handle.Writer.WriteEndElement()   # entity
+            $Handle.Writer.WriteEndElement()   # Inventory
+            $Handle.Writer.Flush()
+        }
+    }
+    finally {
+        try { $Handle.Writer.Close() } catch {}
+    }
+    if ($Abort) {
+        Remove-Item -LiteralPath $Handle.Tmp -Force -ErrorAction SilentlyContinue
+        return
+    }
+    try { Move-Item -LiteralPath $Handle.Tmp -Destination $Handle.Path -Force -ErrorAction Stop }
+    catch { Remove-Item -LiteralPath $Handle.Tmp -Force -ErrorAction SilentlyContinue; throw }
+}
+
+function New-CIWorkerPool {
+    <#
+    .SYNOPSIS
+        Creates and opens a RunspacePool whose runspaces already contain the functions needed to call the CI API.
+    .DESCRIPTION
+        The functions are copied by definition (no dot-sourcing), so workers are independent of
+        the execution policy and of script paths.
+    #>
+    param([Parameter(Mandatory=$true)][int]$Parallelism)
+
+    $names = 'HasValue','Join-Url','Write-CommonDebug','ConvertTo-NormalizedUrl','ConvertTo-GzipBytes',
+             'Invoke-LoginWebRequest','Get-HttpErrorBody','Get-CIAccessToken','Invoke-CIApi',
+             'Get-ApiValidationErrorMessage','Invoke-CIApiRetry','ConvertTo-CIXmlText','Open-CIInv','Close-CIInv'
+
+    $iss = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
+    foreach ($n in $names) {
+        $cmd = Get-Command -Name $n -CommandType Function -ErrorAction Stop
+        $iss.Commands.Add((New-Object System.Management.Automation.Runspaces.SessionStateFunctionEntry($n, $cmd.Definition)))
+    }
+    $pool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, $Parallelism, $iss, $Host)
+    $pool.Open()
+    return $pool
 }
