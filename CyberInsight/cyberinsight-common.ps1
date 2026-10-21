@@ -56,7 +56,8 @@ function Resolve-CI-EffConfig {
         'CyberInsightEndpoint','CyberInsightApiKey','CyberInsightApiLanguage',
         'CyberInsightCompanyName','CyberInsightKeyProperty','CyberInsightCriticality',
         'CyberInsightExportQuery', 'CyberInsightSyncQuery',
-        'CyberInsightCompression', 'CyberInsightCompressionMinSizeKB'
+        'CyberInsightCompression', 'CyberInsightCompressionMinSizeKB',
+        'CyberInsightParallelism'
     )
 
     $fileCfg = @{}
@@ -89,6 +90,14 @@ function Resolve-CI-EffConfig {
     if ([int]::TryParse(([string]$minSizeKbRaw).Trim(), [ref]$parsedKb) -and $parsedKb -ge 0) { $minSizeKb = $parsedKb }
     else { Write-CommonDebug -Context $Common -Message ("CyberInsightCompressionMinSizeKB='{0}' is not a non-negative integer; using default {1} KB" -f $minSizeKbRaw, $minSizeKb) }
 
+    # --- Parallel workers for the GET run (per-software vulnerability + device requests) ---
+    #   CyberInsightParallelism : number of concurrent workers (default 8, range 1..32)
+    $parallelRaw = Get-EffectiveValue -Primary $Parameters -Fallback $fileCfg -Name 'CyberInsightParallelism' -As string -Default '8'
+    $parallelism = 8
+    $parsedPar   = 0
+    if ([int]::TryParse(([string]$parallelRaw).Trim(), [ref]$parsedPar) -and $parsedPar -ge 1) { $parallelism = [Math]::Min(32, $parsedPar) }
+    else { Write-CommonDebug -Context $Common -Message ("CyberInsightParallelism='{0}' is not a positive integer; using default {1}" -f $parallelRaw, $parallelism) }
+
     [pscustomobject]@{
         BaseUrl              = $endpoint
         ApiKey               = $apiKey
@@ -100,6 +109,7 @@ function Resolve-CI-EffConfig {
         Language             = $language
         Compression          = $compression
         CompressionMinSizeKB = $minSizeKb
+        Parallelism          = $parallelism
     }
 }
 
@@ -158,6 +168,9 @@ function New-CIContext {
         # ---- Gzip request compression (ThreatFinder upload) ----
         Compression         = $ci.Compression                       # auto | always | never
         CompressionMinBytes = [long]$ci.CompressionMinSizeKB * 1024  # threshold for "auto"
+
+        # ---- GET run: number of parallel workers ----
+        Parallelism   = [int]$ci.Parallelism
 
         # ---- Token cache ----
         AccessToken   = $null
@@ -560,4 +573,170 @@ function Get-CISubmitErrorMessage {
             return ("{0} ({1})" -f $head, $sizes)
         }
     }
+}
+
+# ---------------------------------------------------------------------------
+#  GET run helpers: retrying API calls, streaming .inv writer, worker pool
+# ---------------------------------------------------------------------------
+
+function Invoke-CIApiRetry {
+    <#
+    .SYNOPSIS
+        GET against the CyberInsight API with retries for transient failures.
+    .DESCRIPTION
+        Retries on network errors (HTTP 0, e.g. DNS/timeouts, also during token acquisition),
+        408/425/429 and 5xx with exponential backoff (5s, 10s, 20s, 40s, 60s + jitter).
+        Non-transient responses (other 4xx) are returned to the caller unchanged.
+        After the last attempt the last response is returned (or the last exception is thrown).
+    .PARAMETER LogSink
+        Optional list that receives one line per retry (used by worker runspaces that have no debug file).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)]$Context,
+        [Parameter(Mandatory=$true)][string]$Path,
+        [int]$MaxAttempts = 6,
+        [System.Collections.IList]$LogSink
+    )
+
+    $attempt = 0
+    while ($true) {
+        $attempt++
+        $resp = $null
+        $err  = $null
+        try { $resp = Invoke-CIApi -Context $Context -Method GET -Path $Path }
+        catch { $err = [string]$_.Exception.Message }
+
+        if ($null -ne $resp -and $resp.IsSuccess) { return $resp }
+
+        $code = if ($null -ne $resp) { [int]$resp.StatusCode } else { 0 }
+        $transient = $false
+        if ($null -ne $resp) {
+            $transient = ($code -eq 0 -or $code -eq 408 -or $code -eq 425 -or $code -eq 429 -or ($code -ge 500 -and $code -le 599))
+        }
+        else {
+            # Exception (e.g. token request): "HTTP 0 ..." or no HTTP code = network problem; other 4xx = permanent
+            $transient = ($err -notmatch 'HTTP (4\d\d)') -or ($err -match 'HTTP (408|425|429)')
+        }
+
+        if (-not $transient -or $attempt -ge $MaxAttempts) {
+            if ($null -ne $resp) { return $resp }
+            throw $err
+        }
+
+        $delay = [Math]::Min(60, 5 * [Math]::Pow(2, $attempt - 1)) + (Get-Random -Minimum 0 -Maximum 3)
+        $what = if ($null -ne $resp) { "HTTP $code $($resp.StatusDescription)" } else { $err }
+        $msg = "RETRY {0}/{1} in {2}s after {3} ({4})" -f $attempt, $MaxAttempts, $delay, $what, $Path
+        if ($LogSink) { [void]$LogSink.Add($msg) } else { Write-CommonDebug -Context $Context.Common -Message $msg }
+        Start-Sleep -Seconds $delay
+    }
+}
+
+function ConvertTo-CIXmlText {
+    <#
+    .SYNOPSIS
+        Trims a value and strips characters that are illegal in XML 1.0 (control chars, lone surrogates).
+    #>
+    param([AllowNull()][object]$Value)
+
+    if ($null -eq $Value) { return '' }
+    if (-not (Get-Variable -Name CIBadXmlRegex -Scope Script -ErrorAction SilentlyContinue)) {
+        $script:CIBadXmlRegex = New-Object System.Text.RegularExpressions.Regex('[#x00-#x08#x0B#x0C#x0E-#x1F#uFFFE#uFFFF]|[#uD800-#uDBFF](?![#uDC00-#uDFFF])|(?<![#uD800-#uDBFF])[#uDC00-#uDFFF]'.Replace('#', '\'))
+    }
+    return $script:CIBadXmlRegex.Replace(([string]$Value), '').Trim()
+}
+
+function Open-CIInv {
+    <#
+    .SYNOPSIS
+        Opens a streaming .inv writer (<file>.tmp) and writes the Inventory envelope plus the opening tag of one entity.
+    .DESCRIPTION
+        Produces the same XML structure as NewEntity/AddPropertyValue/WriteInv, but streams straight to disk
+        (UTF-8) instead of building an entity list, a string and two XmlDocuments in memory.
+        Write child elements with $handle.Writer; finish with Close-CIInv (renames .tmp -> .inv) or
+        Close-CIInv -Abort (deletes the .tmp file).
+    #>
+    param(
+        [Parameter(Mandatory=$true)][string]$FilePath,
+        [Parameter(Mandatory=$true)][string]$Version,
+        [Parameter(Mandatory=$true)][string]$Entity
+    )
+
+    $tmp = "$FilePath.tmp"
+    $settings = New-Object System.Xml.XmlWriterSettings
+    $settings.Indent = $false
+    $settings.OmitXmlDeclaration = $true
+    $settings.CloseOutput = $true
+    $settings.Encoding = New-Object System.Text.UTF8Encoding($true)
+
+    $fs = New-Object System.IO.FileStream($tmp, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None, 65536)
+    try {
+        $w = [System.Xml.XmlWriter]::Create($fs, $settings)
+        $nsVersion = ($Version -split '\.')[0] + '.0'
+        $w.WriteStartElement('Inventory', 'http://www.loginventory.com/schemas/LOGINventory/data')
+        $w.WriteAttributeString('Version', $Version)
+        $w.WriteAttributeString('Agent', 'PostProcessXml')
+        $w.WriteAttributeString('Timestamp', (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ'))
+        $w.WriteStartElement($Entity, ('http://www.loginventory.com/schemas/LOGINventory/data/{0}/LogInfo' -f $nsVersion))
+        $w.WriteAttributeString('ClearMissingCustomProperties', 'false')
+    }
+    catch {
+        $fs.Dispose()
+        Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+        throw
+    }
+    return [pscustomobject]@{ Writer = $w; Tmp = $tmp; Path = $FilePath }
+}
+
+function Close-CIInv {
+    <#
+    .SYNOPSIS
+        Finishes a writer from Open-CIInv. Renames <file>.tmp to <file> so the LOGINventory data service
+        never sees partial files; with -Abort the .tmp file is deleted instead.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]$Handle,
+        [switch]$Abort
+    )
+
+    try {
+        if (-not $Abort) {
+            $Handle.Writer.WriteEndElement()   # entity
+            $Handle.Writer.WriteEndElement()   # Inventory
+            $Handle.Writer.Flush()
+        }
+    }
+    finally {
+        try { $Handle.Writer.Close() } catch {}
+    }
+    if ($Abort) {
+        Remove-Item -LiteralPath $Handle.Tmp -Force -ErrorAction SilentlyContinue
+        return
+    }
+    try { Move-Item -LiteralPath $Handle.Tmp -Destination $Handle.Path -Force -ErrorAction Stop }
+    catch { Remove-Item -LiteralPath $Handle.Tmp -Force -ErrorAction SilentlyContinue; throw }
+}
+
+function New-CIWorkerPool {
+    <#
+    .SYNOPSIS
+        Creates and opens a RunspacePool whose runspaces already contain the functions needed to call the CI API.
+    .DESCRIPTION
+        The functions are copied by definition (no dot-sourcing), so workers are independent of
+        the execution policy and of script paths.
+    #>
+    param([Parameter(Mandatory=$true)][int]$Parallelism)
+
+    $names = 'HasValue','Join-Url','Write-CommonDebug','ConvertTo-NormalizedUrl','ConvertTo-GzipBytes',
+             'Invoke-LoginWebRequest','Get-HttpErrorBody','Get-CIAccessToken','Invoke-CIApi',
+             'Get-ApiValidationErrorMessage','Invoke-CIApiRetry','ConvertTo-CIXmlText','Open-CIInv','Close-CIInv'
+
+    $iss = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
+    foreach ($n in $names) {
+        $cmd = Get-Command -Name $n -CommandType Function -ErrorAction Stop
+        $iss.Commands.Add((New-Object System.Management.Automation.Runspaces.SessionStateFunctionEntry($n, $cmd.Definition)))
+    }
+    $pool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, $Parallelism, $iss, $Host)
+    $pool.Open()
+    return $pool
 }

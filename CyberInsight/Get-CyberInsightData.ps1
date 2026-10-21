@@ -8,14 +8,21 @@
       1) Build Common context (encoding, debug, proxy) via New-CommonContext
       2) Build CI-specific context via New-CIContext
       3) Resolve company by name -> companyId
-      4) Page through vulnerable software (by dara score)
-      5) For each software, page expanded vulnerabilities and their affected devices
-      6) Emit .inv files for each software and for device mappings
+      4) Page through vulnerable software (cursor based, sequential)
+      5) Process every software in parallel workers (runspace pool): page its expanded
+         vulnerabilities and affected devices, stream the software .inv file straight to disk
+      6) Collect the device -> (software, vulnerability) mapping in a compact in-memory structure
+      7) Emit the differential cleanup .inv and one .inv file per device
 
     Key features:
-      * Uses Invoke-CIApi (auth, proxy, retry) and Write-CommonDebug for logging
-      * Paginates vulnerable software, vulnerabilities, and devices
-      * Writes per-software and per-device .inv files into Common.DataDir
+      * Parallel workers (CyberInsightParallelism, default 8), each with its own bearer token
+      * Retries with backoff for transient errors (network/DNS, 408/429/5xx), also for token requests
+      * A software that keeps failing is reported and skipped; the run continues
+        (a long streak of consecutive failures aborts the run)
+      * .inv files are streamed with XmlWriter (no entity list / string / XmlDocument copies in memory)
+        and written to <name>.tmp first, then renamed
+      * Software without matching vulnerabilities does not trigger a device request
+      * Device mapping keeps only references to interned vulnerability ids (a few bytes per pair)
       * Standardized Notify() messages for external log collectors
 
     Requirements:
@@ -35,9 +42,6 @@ Set-StrictMode -Version Latest
 . (Join-Path -Path $PSScriptRoot -ChildPath "..\include\WebRequest.ps1")
 . (Join-Path -Path $PSScriptRoot -ChildPath "cyberinsight-common.ps1")
 
-# --- File name sanitization ---------------------------------------------------
-
-
 function Start-CyberInsightGet {
     <#
     .SYNOPSIS
@@ -53,14 +57,17 @@ function Start-CyberInsightGet {
     # 2) Build CI domain context
     $ctx = New-CIContext -Common $common
 
-    Write-CommonDebug -Context $ctx.Common -Message ("Effective Config: Url={0}, Company={1}, Language={2}, ProxyActive={3}" -f $ctx.ApiUrl, $ctx.CompanyName, $ctx.Language, $ctx.Common.ProxyConfig.Active)
+    Write-CommonDebug -Context $ctx.Common -Message ("Effective Config: Url={0}, Company={1}, Language={2}, ProxyActive={3}, Parallelism={4}" -f $ctx.ApiUrl, $ctx.CompanyName, $ctx.Language, $ctx.Common.ProxyConfig.Active, $ctx.Parallelism)
+
+    $pool = $null
+    $running = New-Object System.Collections.Generic.List[object]
 
     try {
         function Get-CICompanyId {
             param([Parameter(Mandatory)]$Context)
 
-            Write-CommonDebug -Context $Context.Common -Message "GET companies…"
-            $resp = Invoke-CIApi -Context $Context -Method GET -Path "companies"
+            Write-CommonDebug -Context $Context.Common -Message "GET companies"
+            $resp = Invoke-CIApiRetry -Context $Context -Path "companies"
             if (-not $resp.IsSuccess) { throw "Companies failed: HTTP $($resp.StatusCode) $($resp.StatusDescription)" }
 
             $companies = $resp.Body | ConvertFrom-Json
@@ -69,15 +76,6 @@ function Start-CyberInsightGet {
 
             Write-CommonDebug -Context $Context.Common -Message ("CompanyId = {0}" -f $company.id)
             return $company.id
-        }
-
-        function Get-CIDevices {
-            param([Parameter(Mandatory)]$Context,[Parameter(Mandatory)][string]$CompanyId)
-
-            Write-CommonDebug -Context $Context.Common -Message ("GET devices for company {0}" -f $CompanyId)
-            $resp = Invoke-CIApi -Context $Context -Method GET -Path ("companies/{0}/devices" -f $CompanyId)
-            if (-not $resp.IsSuccess) { throw "Devices failed: HTTP $($resp.StatusCode) $($resp.StatusDescription)" }
-            return @($resp.Body | ConvertFrom-Json)
         }
 
         function Get-CIVulnerableSoftwarePage {
@@ -95,55 +93,133 @@ function Start-CyberInsightGet {
             $path = "companies/{0}/vulnerable_softwares?{1}" -f $CompanyId, ($qs -join '&')
 
             Write-CommonDebug -Context $Context.Common -Message ("GET vulnerable_softwares: {0}" -f $path)
-            $resp = Invoke-CIApi -Context $Context -Method GET -Path $path
+            $resp = Invoke-CIApiRetry -Context $Context -Path $path
             if (-not $resp.IsSuccess) { throw "Vulnerable software failed: HTTP $($resp.StatusCode) $($resp.StatusDescription)" }
             return @($resp.Body | ConvertFrom-Json)
         }
 
-        function Get-CISoftwareVulnerabilitiesPage {
-            param(
-                [Parameter(Mandatory)]$Context,
-                [Parameter(Mandatory)][string]$CompanyId,
-                [Parameter(Mandatory)][string]$SoftwareId,
-                [int]$PageSize = 10,
-                [string]$StartAfterCiId = $null,
-                [string]$Criticality = $null
-            )
+        # --- Worker: runs inside a runspace of the pool ----------------------------
+        # Fetches vulnerabilities + affected devices of ONE software, streams the software .inv file
+        # and returns a small result hashtable. Has no debug file; log lines are returned instead.
+        $ciWorker = {
+            param($Ctx, $CompanyId, $Sw, $FilePath, $Version, $VulnPageSize, $DevPageSize, $Criticality, $KeyProperty, $Intern)
 
-            $qs = @("page_size=$PageSize")
-            if ($StartAfterCiId) { $qs += "start_after=$StartAfterCiId" }
-            if ($Criticality) {
-                $qs += ($Criticality -split '\|' | ForEach-Object { "criticality=$($_.Trim())" })
+            $log    = New-Object System.Collections.Generic.List[string]
+            $result = @{ Ok = $false; Error = ''; SoftwareId = $Sw.id; VulnCount = 0; DeviceCount = 0; Devices = $null; File = $FilePath; Log = $log; Seconds = 0.0 }
+            $clock  = [System.Diagnostics.Stopwatch]::StartNew()
+            $inv    = $null
+            try {
+                # One context (= one bearer token) per runspace, kept in the runspace's global scope
+                $c = Get-Variable -Name CIWorkerCtx -Scope Global -ValueOnly -ErrorAction SilentlyContinue
+                if (-not $c) {
+                    $c = $Ctx.PSObject.Copy()
+                    $cm = $Ctx.Common.PSObject.Copy()
+                    $cm.DebugFile = $null
+                    $c.Common = $cm
+                    $c.AccessToken = $null
+                    $c.TokenExpiry = [DateTime]::MinValue
+                    Set-Variable -Name CIWorkerCtx -Scope Global -Value $c
+                }
+
+                $critQs = ''
+                if ($Criticality) { $critQs = '&' + ((($Criticality -split '\|') | ForEach-Object { 'criticality=' + $_.Trim() }) -join '&') }
+                $inv_ci = [System.Globalization.CultureInfo]::InvariantCulture
+
+                $inv = Open-CIInv -FilePath $FilePath -Version $Version -Entity 'SoftwarePackage'
+                $w = $inv.Writer
+                $w.WriteElementString('Name',               (ConvertTo-CIXmlText $Sw.software_name))
+                $w.WriteElementString('Version',            (ConvertTo-CIXmlText $Sw.software_version))
+                $w.WriteElementString('Publisher',          (ConvertTo-CIXmlText $Sw.software_publisher))
+                $w.WriteElementString('Platform',           (ConvertTo-CIXmlText $Sw.software_metadata))
+                $w.WriteElementString('VulnerabilityScore', ([math]::Round($Sw.dara_score_sum * 10, 2, [System.MidpointRounding]::AwayFromZero)).ToString($inv_ci))
+                $w.WriteElementString('SoftwareId',         ([string]$Sw.id))
+
+                # --- expanded vulnerabilities -> streamed into the software .inv ---
+                $startAfter = $null
+                $vulnCount  = 0
+                do {
+                    $path = "companies/{0}/vulnerable_softwares/{1}/expanded_vulnerabilities?page_size={2}{3}" -f $CompanyId, $Sw.id, $VulnPageSize, $critQs
+                    if ($startAfter) { $path += "&start_after=$startAfter" }
+                    $t0 = $clock.ElapsedMilliseconds
+                    $resp = Invoke-CIApiRetry -Context $c -Path $path -LogSink $log
+                    if (-not $resp.IsSuccess) { throw "Vulnerabilities failed: HTTP $($resp.StatusCode) $($resp.StatusDescription)" }
+                    $t1 = $clock.ElapsedMilliseconds
+                    $parsed = $resp.Body | ConvertFrom-Json
+                    $vulns = if ($null -eq $parsed) { @() } else { @($parsed) }   # PS 5.1 emits a JSON array as ONE object; @() keeps it flat
+                    $resp = $null
+                    $log.Add(("expanded_vulnerabilities start_after={0}: {1} items, request {2} ms, parse {3} ms" -f $startAfter, $vulns.Count, ($t1 - $t0), ($clock.ElapsedMilliseconds - $t1)))
+
+                    foreach ($v in $vulns) {
+                        $w.WriteStartElement('Vulnerabilities')
+                        $w.WriteElementString('Name',                  (ConvertTo-CIXmlText $v.ci_id))
+                        $w.WriteElementString('Score',                 ([math]::Round($v.dara_score * 10, 2, [System.MidpointRounding]::AwayFromZero)).ToString($inv_ci))
+                        $w.WriteElementString('Description',           (ConvertTo-CIXmlText $v.description))
+                        $w.WriteElementString('AttackVector',          ("$($v.attack_vector)"))
+                        $w.WriteElementString('AttackComplexity',      ("$($v.attack_complexity)"))
+                        $w.WriteElementString('PrivilegesRequired',    ("$($v.privileges_required)"))
+                        $w.WriteElementString('UserInteraction',       ("$($v.user_interaction)"))
+                        $w.WriteElementString('Scope',                 ("$($v.scope)"))
+                        $w.WriteElementString('ConfidentialityImpact', ("$($v.confidentiality)"))
+                        $w.WriteElementString('IntegrityImpact',       ("$($v.integrity)"))
+                        $w.WriteElementString('AvailabilityImpact',    ("$($v.availability)"))
+                        $w.WriteElementString('IsExploitable',         ("$($v.is_exploitable)"))
+                        $w.WriteElementString('SoftwareId',            ([string]$Sw.id))
+                        $w.WriteEndElement()
+                    }
+                    $vulnCount += $vulns.Count
+                    $startAfter = if ($vulns.Count -gt 0) { [string]$vulns[-1].ci_id } else { $null }
+                    $more = ($vulns.Count -ge $VulnPageSize)
+                    $vulns = $null
+                } while ($more)
+                $result.VulnCount = $vulnCount
+
+                # --- affected devices (only if there is at least one matching vulnerability) ---
+                $devMap = New-Object 'System.Collections.Generic.Dictionary[string,System.Collections.Generic.List[string]]' ([System.StringComparer]::OrdinalIgnoreCase)
+                if ($vulnCount -gt 0) {
+                    $startAfter = $null
+                    do {
+                        $path = "companies/{0}/vulnerable_softwares/{1}/vulnerabilities/devices?page_size={2}{3}" -f $CompanyId, $Sw.id, $DevPageSize, $critQs
+                        if ($startAfter) { $path += "&start_after=$startAfter" }
+                        $t0 = $clock.ElapsedMilliseconds
+                        $resp = Invoke-CIApiRetry -Context $c -Path $path -LogSink $log
+                        if (-not $resp.IsSuccess) { throw "Vulnerability devices failed: HTTP $($resp.StatusCode) $($resp.StatusDescription)" }
+                        $t1 = $clock.ElapsedMilliseconds
+                        $parsed = $resp.Body | ConvertFrom-Json
+                        $vCiDevs = if ($null -eq $parsed) { @() } else { @($parsed) }
+                        $resp = $null
+                        $log.Add(("vulnerabilities/devices start_after={0}: {1} items, request {2} ms, parse {3} ms" -f $startAfter, $vCiDevs.Count, ($t1 - $t0), ($clock.ElapsedMilliseconds - $t1)))
+
+                        foreach ($vCi in $vCiDevs) {
+                            $ciId = $Intern.GetOrAdd([string]$vCi.ci_id, [string]$vCi.ci_id)   # one shared string instance per vulnerability id
+                            foreach ($d in $vCi.devices) {
+                                $deviceKey = if ($KeyProperty -eq 'Name') { [string]$d.name } else { [string]$d.id }
+                                if ([string]::IsNullOrWhiteSpace($deviceKey)) { continue }
+                                $list = $null
+                                if (-not $devMap.TryGetValue($deviceKey, [ref]$list)) {
+                                    $list = New-Object 'System.Collections.Generic.List[string]'
+                                    $devMap[$deviceKey] = $list
+                                }
+                                $list.Add($ciId)
+                            }
+                        }
+                        $startAfter = if ($vCiDevs.Count -gt 0) { [string]$vCiDevs[-1].ci_id } else { $null }
+                        $more = ($vCiDevs.Count -ge $DevPageSize)
+                        $vCiDevs = $null
+                    } while ($more)
+                }
+                $result.Devices     = $devMap
+                $result.DeviceCount = $devMap.Count
+
+                Close-CIInv -Handle $inv
+                $inv = $null
+                $result.Ok = $true
             }
-            $path = "companies/{0}/vulnerable_softwares/{1}/expanded_vulnerabilities?{2}" -f $CompanyId, $SoftwareId, ($qs -join '&')
-
-            Write-CommonDebug -Context $Context.Common -Message ("GET vulnerabilities: {0}" -f $path)
-            $resp = Invoke-CIApi -Context $Context -Method GET -Path $path
-            if (-not $resp.IsSuccess) { throw "Vulnerabilities failed: HTTP $($resp.StatusCode) $($resp.StatusDescription)" }
-            return @($resp.Body | ConvertFrom-Json)
-        }
-
-        function Get-CISoftwareVulnerabilityDevicesPage {
-            param(
-                [Parameter(Mandatory)]$Context,
-                [Parameter(Mandatory)][string]$CompanyId,
-                [Parameter(Mandatory)][string]$SoftwareId,
-                [int]$PageSize = 5000,
-                [string]$StartAfterCiId = $null,
-                [string]$Criticality = $null
-            )
-
-            $qs = @("page_size=$PageSize")
-            if ($StartAfterCiId) { $qs += "start_after=$StartAfterCiId" }
-            if ($Criticality) {
-                $qs += ($Criticality -split '\|' | ForEach-Object { "criticality=$($_.Trim())" })
+            catch {
+                $result.Error = [string]$_.Exception.Message
+                if ($inv) { try { Close-CIInv -Handle $inv -Abort } catch {} ; $inv = $null }
             }
-            $path = "companies/{0}/vulnerable_softwares/{1}/vulnerabilities/devices?{2}" -f $CompanyId, $SoftwareId, ($qs -join '&')
-
-            Write-CommonDebug -Context $Context.Common -Message ("GET vulnerabilities: {0}" -f $path)
-            $resp = Invoke-CIApi -Context $Context -Method GET -Path $path
-            if (-not $resp.IsSuccess) { throw "Vulnerabilities failed: HTTP $($resp.StatusCode) $($resp.StatusDescription)" }
-            return @($resp.Body | ConvertFrom-Json)
+            $result.Seconds = [Math]::Round($clock.Elapsed.TotalSeconds, 1)
+            return $result
         }
 
         # --- Main flow -----------------------------------------------------------
@@ -152,98 +228,147 @@ function Start-CyberInsightGet {
         $companyId = Get-CICompanyId -Context $ctx
         Notify -name "CyberInsightApi" -itemName "Company" -message ("Found {0}" -f $ctx.CompanyName) -category "Info" -state "Finished" -itemResult "Ok"
 
-        # Page vulnerable software
+        # Page vulnerable software (cursor = dara_score_sum of the last entry; sequential by nature)
         $softwarePageSize = 100
         $vulnPageSize     = 5000
         $devPageSize      = 5000
         $lastDaraScore    = $null
 
         $softwareList = New-Object System.Collections.Generic.List[object]
+        $seenIds      = New-Object 'System.Collections.Generic.HashSet[string]'
 
         do {
             $VulnerableSoftware = Get-CIVulnerableSoftwarePage -Context $ctx -CompanyId $companyId -PageSize $softwarePageSize -StartAfterDaraScore $lastDaraScore
-              
+
+            $newOnPage = 0
             foreach ($sw in $VulnerableSoftware) {
+                $lastDaraScore = $sw.dara_score_sum
+                # Guard against overlapping pages (same cursor value): never queue a software twice
+                if (-not $seenIds.Add([string]$sw.id)) { continue }
+                $newOnPage++
                 Notify -name "$($sw.software_name) [$($sw.software_version)]" -itemName "-" -message "-" -category "Info" -itemResult "None" -state "Queued"
                 [void]$softwareList.Add($sw)
-                $lastDaraScore = $sw.dara_score_sum
             }
-            if ($VulnerableSoftware.Count -lt $softwarePageSize) {
+            if ($VulnerableSoftware.Count -lt $softwarePageSize) { break }
+            if ($newOnPage -eq 0) {
+                Write-CommonDebug -Context $ctx.Common -Message ("Software paging made no progress at dara_score_sum={0}; stopping paging" -f $lastDaraScore)
                 break
             }
-            
         } while ($true)
+
         if ($softwareList.Count -eq 0) {
             Notify -name "CyberInsightApi" -itemName "-" -message "No data available yet, please try again later" -category "Error" -state "Faulty" -itemResult "Error"
             exit 1
         }
-        # Mapping: device -> list of (software_id, ci_id)
-        $deviceMap = @{}
-        foreach ($sw in $softwareList) {
-            Notify -name "$($sw.software_name) [$($sw.software_version)]" -itemName "Vulnerabilities" -message "Loading" -category "Info" -state "Executing" -itemResult "None"
+        Write-CommonDebug -Context $ctx.Common -Message ("Software list complete: {0} entries; processing with {1} parallel workers" -f $softwareList.Count, $ctx.Parallelism)
 
-            NewEntity -name "SoftwarePackage"
-            AddPropertyValue -name "Name"               -value $sw.software_name
-            AddPropertyValue -name "Version"            -value $sw.software_version
-            AddPropertyValue -name "Publisher"          -value $sw.software_publisher
-            AddPropertyValue -name "Platform"           -value $sw.software_metadata
-            AddPropertyValue -name "VulnerabilityScore" -value ([math]::Round($sw.dara_score_sum * 10, 2, [System.MidpointRounding]::AwayFromZero))
+        # Mapping: device key -> alternating entries [software id, string[] of vulnerability ids]
+        $deviceMap = New-Object 'System.Collections.Generic.Dictionary[string,System.Collections.Generic.List[object]]' ([System.StringComparer]::OrdinalIgnoreCase)
+        $intern    = New-Object 'System.Collections.Concurrent.ConcurrentDictionary[string,string]'
 
-            AddPropertyValue -name "SoftwareId"         -value $sw.id
+        $dop  = [Math]::Max(1, [int]$ctx.Parallelism)
+        $pool = New-CIWorkerPool -Parallelism $dop
 
-            $startAfterCi = $null
-            do {
-                $vulns = Get-CISoftwareVulnerabilitiesPage -Context $ctx -CompanyId $companyId -SoftwareId $sw.id -PageSize $vulnPageSize -StartAfterCiId $startAfterCi -Criticality $ctx.Criticality
-                foreach ($v in $vulns) {
-                    AddPropertyValue -name "Vulnerabilities.Name"                  -value $v.ci_id
-                    AddPropertyValue -name "Vulnerabilities.Score"                 -value ([math]::Round($v.dara_score * 10, 2, [System.MidpointRounding]::AwayFromZero))
-                    AddPropertyValue -name "Vulnerabilities.Description"           -value $v.description
-                    AddPropertyValue -name "Vulnerabilities.AttackVector"          -value $v.attack_vector
-                    AddPropertyValue -name "Vulnerabilities.AttackComplexity"      -value $v.attack_complexity
-                    AddPropertyValue -name "Vulnerabilities.PrivilegesRequired"    -value $v.privileges_required
-                    AddPropertyValue -name "Vulnerabilities.UserInteraction"       -value $v.user_interaction
-                    AddPropertyValue -name "Vulnerabilities.Scope"                 -value $v.scope
-                    AddPropertyValue -name "Vulnerabilities.ConfidentialityImpact" -value $v.confidentiality
-                    AddPropertyValue -name "Vulnerabilities.IntegrityImpact"       -value $v.integrity
-                    AddPropertyValue -name "Vulnerabilities.AvailabilityImpact"    -value $v.availability
-                    AddPropertyValue -name "Vulnerabilities.IsExploitable"         -value $v.is_exploitable
-                    AddPropertyValue -name "Vulnerabilities.SoftwareId"            -value $sw.id
+        $total        = $softwareList.Count
+        $nextIndex    = 0
+        $done         = 0
+        $failed       = 0
+        $failStreak   = 0
+        $maxFailStreak = [Math]::Max(10, $dop * 2)
+        $aborted      = $false
+        $runClock     = [System.Diagnostics.Stopwatch]::StartNew()
+
+        while (($nextIndex -lt $total -or $running.Count -gt 0) -and -not $aborted) {
+
+            # Keep the pool busy (a small backlog keeps workers from idling while results are processed)
+            while ($nextIndex -lt $total -and $running.Count -lt ($dop + 2)) {
+                $sw = $softwareList[$nextIndex]
+                $nextIndex++
+
+                $timestamp   = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
+                $safeName    = New-SafeFileName $sw.software_name
+                $safeVersion = New-SafeFileName $sw.software_version
+                $filePath    = Join-Path $ctx.Common.DataDir ("{0}_ci_{1}_{2}_{3}.inv" -f $timestamp, $safeName, $safeVersion, $sw.id)
+
+                Notify -name "$($sw.software_name) [$($sw.software_version)]" -itemName "Vulnerabilities" -message "Loading" -category "Info" -state "Executing" -itemResult "None"
+
+                $ps = [System.Management.Automation.PowerShell]::Create()
+                $ps.RunspacePool = $pool
+                [void]$ps.AddScript($ciWorker.ToString())
+                [void]$ps.AddArgument($ctx).AddArgument([string]$companyId).AddArgument($sw).AddArgument($filePath).AddArgument([string]$ctx.Common.Version)
+                [void]$ps.AddArgument($vulnPageSize).AddArgument($devPageSize).AddArgument([string]$ctx.Criticality).AddArgument([string]$ctx.KeyProperty).AddArgument($intern)
+                $running.Add([pscustomobject]@{ Ps = $ps; Handle = $ps.BeginInvoke(); Sw = $sw })
+            }
+
+            # Collect finished workers
+            $progress = $false
+            for ($i = $running.Count - 1; $i -ge 0; $i--) {
+                $job = $running[$i]
+                if (-not $job.Handle.IsCompleted) { continue }
+                $running.RemoveAt($i)
+                $progress = $true
+                $sw = $job.Sw
+
+                $r = $null
+                try {
+                    $out = $job.Ps.EndInvoke($job.Handle)
+                    if ($out -and $out.Count -gt 0) { $r = $out[$out.Count - 1] }
+                    elseif ($job.Ps.Streams.Error.Count -gt 0) { $r = @{ Ok = $false; Error = [string]$job.Ps.Streams.Error[0]; Log = @(); Devices = $null; VulnCount = 0; DeviceCount = 0; Seconds = 0 } }
+                    else { $r = @{ Ok = $false; Error = 'Worker returned no result'; Log = @(); Devices = $null; VulnCount = 0; DeviceCount = 0; Seconds = 0 } }
                 }
-                $startAfterCi = if (@($vulns).Count -gt 0) { $vulns[-1].ci_id } else { $null }
-            } while ($vulns.Count -ge $vulnPageSize)
+                catch {
+                    $r = @{ Ok = $false; Error = [string]$_.Exception.Message; Log = @(); Devices = $null; VulnCount = 0; DeviceCount = 0; Seconds = 0 }
+                }
+                finally {
+                    $job.Ps.Dispose()
+                }
 
-            # Page affected devices
-            $startDevAfterCi = $null
-            do {
-                $vCiDevs = Get-CISoftwareVulnerabilityDevicesPage -Context $ctx -CompanyId $companyId -SoftwareId $sw.id -PageSize $devPageSize -StartAfterCiId $startDevAfterCi -Criticality $ctx.Criticality
-                foreach ($vCi in $vCiDevs) {
-                    foreach ($d in $vCi.devices) {
-                        # Device key: prefer Name when KeyProperty=Name, else use server id
-                        $deviceKey = if ($ctx.KeyProperty -eq "Name") { [string]$d.name } else { $d.id }
-                        if (-not $deviceMap.ContainsKey($deviceKey)) { $deviceMap[$deviceKey] = New-Object System.Collections.Generic.List[object] }
-                        [void]$deviceMap[$deviceKey].Add([PSCustomObject]@{ software_id = $sw.id; ci_id = $vCi.ci_id })
+                $done++
+                foreach ($line in $r.Log) { Write-CommonDebug -Context $ctx.Common -Message ("  [sw {0}] {1}" -f $sw.id, $line) }
+
+                if ($r.Ok) {
+                    $failStreak = 0
+                    # Merge the device mapping (per device one reference to the vulnerability id list)
+                    foreach ($kv in $r.Devices.GetEnumerator()) {
+                        $entry = $null
+                        if (-not $deviceMap.TryGetValue($kv.Key, [ref]$entry)) {
+                            $entry = New-Object 'System.Collections.Generic.List[object]'
+                            $deviceMap[$kv.Key] = $entry
+                        }
+                        $entry.Add($sw.id)
+                        $entry.Add($kv.Value)
+                    }
+                    Write-CommonDebug -Context $ctx.Common -Message ("Software done {0}/{1}: id={2} {3} [{4}] vulns={5} devices={6} {7}s (elapsed {8:N0}s, running {9})" -f $done, $total, $sw.id, $sw.software_name, $sw.software_version, $r.VulnCount, $r.DeviceCount, $r.Seconds, $runClock.Elapsed.TotalSeconds, $running.Count)
+                    Notify -name "Vulnerability Data" -itemName "-" -message ("Written to {0}" -f $r.File) -category "Info" -state "Finished" -itemResult "Ok"
+                    Notify -name "$($sw.software_name) [$($sw.software_version)]" -itemName "Vulnerabilities" -message "Done" -category "Info" -state "Finished" -itemResult "Ok"
+                }
+                else {
+                    $failed++
+                    $failStreak++
+                    Write-CommonDebug -Context $ctx.Common -Message ("ERROR software {0}/{1}: id={2} {3} [{4}]: {5}" -f $done, $total, $sw.id, $sw.software_name, $sw.software_version, $r.Error)
+                    Notify -name "$($sw.software_name) [$($sw.software_version)]" -itemName "Vulnerabilities" -message ("Error: {0}" -f $r.Error) -category "Error" -state "Faulty" -itemResult "Error"
+                    if ($failStreak -ge $maxFailStreak) {
+                        $aborted = $true
+                        Write-CommonDebug -Context $ctx.Common -Message ("Aborting: {0} consecutive software requests failed (last error: {1})" -f $failStreak, $r.Error)
+                        break
                     }
                 }
-                $startDevAfterCi = if ($vCiDevs.Count -gt 0) { $vCiDevs[-1].ci_id } else { $null }
-            } while ($vCiDevs.Count -ge $devPageSize)
+            }
 
-            # Write .inv for this software (sanitize name/version)
-            $timestamp   = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
-            $safeName    = New-SafeFileName $sw.software_name
-            $safeVersion = New-SafeFileName $sw.software_version
-            $fileName    = "{0}_ci_{1}_{2}.inv" -f $timestamp, $safeName, $safeVersion
-            $filePath    = Join-Path $ctx.Common.DataDir $fileName
-
-            Write-CommonDebug -Context $ctx.Common -Message ("Writing INV to {0}" -f $filePath)
-            Notify -name "Vulnerability Data" -itemName "-" -message ("Write to {0}" -f $filePath) -category "Info" -state "Executing" -itemResult "None"
-            WriteInv -filePath $filePath -version $ctx.Common.Version
-            Notify -name "Vulnerability Data" -itemName "-" -message ("Written to {0}" -f $filePath) -category "Info" -state "Finished" -itemResult "Ok"
-
-            Notify -name "$($sw.software_name) [$($sw.software_version)]" -itemName "Vulnerabilities" -message "Done" -category "Info" -state "Finished" -itemResult "Ok"
+            if (-not $progress) { Start-Sleep -Milliseconds 100 }
         }
 
+        if ($aborted) {
+            throw ("Aborted after {0} consecutive failed software requests; device mapping was not written." -f $failStreak)
+        }
+
+        $pool.Close()
+        $pool.Dispose()
+        $pool = $null
+        Write-CommonDebug -Context $ctx.Common -Message ("All software processed: {0} ok, {1} failed, {2:N0}s; devices in mapping: {3}" -f ($total - $failed), $failed, $runClock.Elapsed.TotalSeconds, $deviceMap.Count)
+
         # Get current export data to determine differentials in order to cleanup missing software
-        
+
         Initialize-LiDrive -context $ctx.Common
         # Determine LI location (folder/query in the LI: provider)
         $location = $ctx.SyncQuery
@@ -266,7 +391,7 @@ function Start-CyberInsightGet {
                 @{n='Publisher'; e={$_.software_publisher}},
                 @{n='Platform'; e={$_.software_metadata}}
 
-            # Nur Einträge, die NUR in $left vorkommen
+            # Nur Eintraege, die NUR in $left vorkommen
             $missing = Compare-Object -ReferenceObject $left -DifferenceObject $right `
                     -Property Name,Version,Publisher,Platform -PassThru |
                     Where-Object SideIndicator -eq '<=' |
@@ -295,30 +420,51 @@ function Start-CyberInsightGet {
             Pop-Location
         }
 
-        # Write device mapping .inv files (sanitize device key)
+        # Write device mapping .inv files (streamed; each device's data is released after it was written)
         Notify -name "Vulnerable Device Results" -itemName "-" -message "Writing devices" -category "Info" -state "Executing" -itemResult "None"
 
-        foreach ($device in $deviceMap.Keys) {
-            NewEntity -name "Device"
-            AddPropertyValue -name $ctx.KeyProperty -value $device
-            foreach ($tuple in $deviceMap[$device]) {
-                AddPropertyValue -name "Vulnerabilities.SoftwareId" -value $tuple.software_id
-                AddPropertyValue -name "Vulnerabilities.Name"       -value $tuple.ci_id
-            }
-
+        $devicesWritten = 0
+        foreach ($device in @($deviceMap.Keys)) {
+            $entries   = $deviceMap[$device]
             $timestamp = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
             $safeDev   = New-SafeFileName $device
             $fileName  = "{0}_ci_{1}.inv" -f $timestamp, $safeDev
             $filePath  = Join-Path $ctx.Common.DataDir $fileName
 
+            $inv = Open-CIInv -FilePath $filePath -Version $ctx.Common.Version -Entity 'Device'
+            try {
+                $w = $inv.Writer
+                $w.WriteElementString([string]$ctx.KeyProperty, (ConvertTo-CIXmlText $device))
+                for ($e = 0; $e -lt $entries.Count; $e += 2) {
+                    $swId  = [string]$entries[$e]
+                    foreach ($ciId in $entries[$e + 1]) {
+                        $w.WriteStartElement('Vulnerabilities')
+                        $w.WriteElementString('SoftwareId', $swId)
+                        $w.WriteElementString('Name', (ConvertTo-CIXmlText $ciId))
+                        $w.WriteEndElement()
+                    }
+                }
+                Close-CIInv -Handle $inv
+            }
+            catch {
+                try { Close-CIInv -Handle $inv -Abort } catch {}
+                throw
+            }
+            [void]$deviceMap.Remove($device)
+            $devicesWritten++
+
             Write-CommonDebug -Context $ctx.Common -Message ("Writing INV to {0}" -f $filePath)
-            WriteInv -filePath $filePath -version $ctx.Common.Version
             Notify -name "Vulnerability Device Data" -itemName "$($device)" -message ("Written to {0}" -f $filePath) -category "Info" -state "Finished" -itemResult "Ok"
         }
         Notify -name "Vulnerability Device Data" -itemName "-" -message "-" -category "Info" -state "Finished" -itemResult "Ok"
         Notify -name "Vulnerable Device Results" -itemName "-" -message "Writing devices" -category "Info" -state "Finished" -itemResult "Ok"
+        Write-CommonDebug -Context $ctx.Common -Message ("Device files written: {0}" -f $devicesWritten)
 
         $deviceMap.Clear()
+
+        if ($failed -gt 0) {
+            throw ("{0} of {1} software entries could not be loaded (see debug log); all other data was written." -f $failed, $total)
+        }
     }
     catch {
         Write-CommonDebug -Context $ctx.Common -Message ("ERROR: {0}" -f $_)
@@ -327,6 +473,8 @@ function Start-CyberInsightGet {
         exit 1
     }
     finally {
+        foreach ($job in $running) { try { $job.Ps.Stop() } catch {} ; try { $job.Ps.Dispose() } catch {} }
+        if ($pool) { try { $pool.Close(); $pool.Dispose() } catch {} }
         Write-CommonDebug -Context $ctx.Common -Message "GET finished."
     }
 }

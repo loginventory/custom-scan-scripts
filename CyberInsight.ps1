@@ -38,6 +38,10 @@
         <value>100</value> <!-- payload size in KB from which "auto" compresses (CyberInsight recommends 100 KB) -->
     </setting>
 
+    <setting name="CyberInsightParallelism" serializeAs="String">
+        <value>8</value> <!-- Action=Get: number of parallel workers loading vulnerabilities/devices per software (1-32, default 8) -->
+    </setting>
+
     Gzip request compression (see https://documentation-433337190849.europe-west3.run.app/gzip-compression/):
     The CyberInsight gateway accepts at most 32 MB per request body and 150 MB decompressed.
     Large inventories are therefore gzip-compressed before upload (Content-Encoding: gzip).
