@@ -9,12 +9,14 @@
       2) Build CI-specific context via New-CIContext
       3) Resolve company by name -> companyId
       4) Page through vulnerable software (cursor based, sequential)
-      5) Process every software in parallel workers (runspace pool): page its expanded
+      5) Reduce the list to one software id per package (name, version, publisher, platform)
+      6) Process every software in parallel workers (runspace pool): page its expanded
          vulnerabilities and affected devices, stream the software .inv file straight to disk
-      6) Collect the device -> (software, vulnerability) mapping in a compact in-memory structure
-      7) Emit the differential cleanup .inv and one .inv file per device
+      7) Collect the device -> (software, vulnerability) mapping in a compact in-memory structure
+      8) Emit the differential cleanup .inv and one .inv file per device
 
     Key features:
+      * CyberInsight lists identical packages under many software ids; only the lowest id per package is used
       * Parallel workers (CyberInsightParallelism, default 4), each with its own bearer token
       * Retries with backoff for transient errors (network/DNS, 408/429/5xx), also for token requests
       * A software that keeps failing is reported and skipped; the run continues
@@ -239,7 +241,7 @@ function Start-CyberInsightGet {
         $devPageSize      = 5000
         $lastDaraScore    = $null
 
-        $softwareList = New-Object System.Collections.Generic.List[object]
+        $allSoftware  = New-Object System.Collections.Generic.List[object]
         $seenIds      = New-Object 'System.Collections.Generic.HashSet[string]'
 
         do {
@@ -251,8 +253,7 @@ function Start-CyberInsightGet {
                 # Guard against overlapping pages (same cursor value): never queue a software twice
                 if (-not $seenIds.Add([string]$sw.id)) { continue }
                 $newOnPage++
-                Notify -name "$($sw.software_name) [$($sw.software_version)]" -itemName "-" -message "-" -category "Info" -itemResult "None" -state "Queued"
-                [void]$softwareList.Add($sw)
+                [void]$allSoftware.Add($sw)
             }
             if ($VulnerableSoftware.Count -lt $softwarePageSize) { break }
             if ($newOnPage -eq 0) {
@@ -261,11 +262,32 @@ function Start-CyberInsightGet {
             }
         } while ($true)
 
-        if ($softwareList.Count -eq 0) {
+        if ($allSoftware.Count -eq 0) {
             Notify -name "CyberInsightApi" -itemName "-" -message "No data available yet, please try again later" -category "Error" -state "Faulty" -itemResult "Error"
             exit 1
         }
-        Write-CommonDebug -Context $ctx.Common -Message ("Software list complete: {0} entries; processing with {1} parallel workers" -f $softwareList.Count, $ctx.Parallelism)
+
+        # CyberInsight may list the same package (name, version, publisher, platform) under many software ids.
+        # LOGINventory identifies a SoftwarePackage by exactly these four values and stores ONE SoftwareId per package,
+        # so only one id (the lowest) per package is processed. Using every id would write each vulnerability of each
+        # device once per duplicate id (and most of them would not resolve to the SoftwarePackage).
+        $sep       = [string][char]31
+        $groups    = New-Object 'System.Collections.Generic.Dictionary[string,object]' ([System.StringComparer]::OrdinalIgnoreCase)
+        foreach ($sw in $allSoftware) {
+            $key = (@([string]$sw.software_name, [string]$sw.software_version, [string]$sw.software_publisher, [string]$sw.software_metadata) | ForEach-Object { $_.Trim() }) -join $sep
+            $known = $null
+            if (-not $groups.TryGetValue($key, [ref]$known)) { $groups[$key] = $sw; continue }
+            if ([long]$sw.id -lt [long]$known.id) { $groups[$key] = $sw }
+        }
+        $softwareList = New-Object System.Collections.Generic.List[object]
+        foreach ($sw in $allSoftware) {
+            $key = (@([string]$sw.software_name, [string]$sw.software_version, [string]$sw.software_publisher, [string]$sw.software_metadata) | ForEach-Object { $_.Trim() }) -join $sep
+            if ([string]$groups[$key].id -ne [string]$sw.id) { continue }
+            Notify -name "$($sw.software_name) [$($sw.software_version)]" -itemName "-" -message "-" -category "Info" -itemResult "None" -state "Queued"
+            [void]$softwareList.Add($sw)
+        }
+        Write-CommonDebug -Context $ctx.Common -Message ("Software list complete: {0} entries from CyberInsight, {1} distinct packages ({2} duplicate ids skipped); processing with {3} parallel workers" -f $allSoftware.Count, $softwareList.Count, ($allSoftware.Count - $softwareList.Count), $ctx.Parallelism)
+        $allSoftware = $null
 
         # Mapping: device key -> alternating entries [software id, string[] of vulnerability ids]
         $deviceMap = New-Object 'System.Collections.Generic.Dictionary[string,System.Collections.Generic.List[object]]' ([System.StringComparer]::OrdinalIgnoreCase)
