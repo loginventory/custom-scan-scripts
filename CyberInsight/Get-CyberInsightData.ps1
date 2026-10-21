@@ -102,7 +102,7 @@ function Start-CyberInsightGet {
         # Fetches vulnerabilities + affected devices of ONE software, streams the software .inv file
         # and returns a small result hashtable. Has no debug file; log lines are returned instead.
         $ciWorker = {
-            param($Ctx, $CompanyId, $Sw, $FilePath, $Version, $VulnPageSize, $DevPageSize, $Criticality, $KeyProperty, $Intern)
+            param($Cfg, $CompanyId, $Sw, $FilePath, $Version, $VulnPageSize, $DevPageSize, $Criticality, $KeyProperty, $Intern)
 
             $log    = New-Object System.Collections.Generic.List[string]
             $result = @{ Ok = $false; Error = ''; SoftwareId = $Sw.id; VulnCount = 0; DeviceCount = 0; Devices = $null; File = $FilePath; Log = $log; Seconds = 0.0 }
@@ -112,12 +112,16 @@ function Start-CyberInsightGet {
                 # One context (= one bearer token) per runspace, kept in the runspace's global scope
                 $c = Get-Variable -Name CIWorkerCtx -Scope Global -ValueOnly -ErrorAction SilentlyContinue
                 if (-not $c) {
-                    $c = $Ctx.PSObject.Copy()
-                    $cm = $Ctx.Common.PSObject.Copy()
-                    $cm.DebugFile = $null
-                    $c.Common = $cm
-                    $c.AccessToken = $null
-                    $c.TokenExpiry = [DateTime]::MinValue
+                    # Built from plain values (no sharing of the main context object between threads)
+                    $c = [pscustomobject]@{
+                        Common      = [pscustomobject]@{ DebugFile = $null; ProxyConfig = $Cfg.ProxyConfig; Version = $Cfg.Version }
+                        ApiUrl      = $Cfg.ApiUrl
+                        ApiKey      = $Cfg.ApiKey
+                        Language    = $Cfg.Language
+                        AccessToken = $null
+                        TokenType   = 'Bearer'
+                        TokenExpiry = [DateTime]::MinValue
+                    }
                     Set-Variable -Name CIWorkerCtx -Scope Global -Value $c
                 }
 
@@ -145,9 +149,9 @@ function Start-CyberInsightGet {
                     if (-not $resp.IsSuccess) { throw "Vulnerabilities failed: HTTP $($resp.StatusCode) $($resp.StatusDescription)" }
                     $t1 = $clock.ElapsedMilliseconds
                     $parsed = $resp.Body | ConvertFrom-Json
-                    $vulns = if ($null -eq $parsed) { @() } else { @($parsed) }   # PS 5.1 emits a JSON array as ONE object; @() keeps it flat
+                    $vulns = @(); if ($null -ne $parsed) { $vulns = @($parsed) }   # PS 5.1 emits a JSON array as ONE object; @() keeps it flat
                     $resp = $null
-                    $log.Add(("expanded_vulnerabilities start_after={0}: {1} items, request {2} ms, parse {3} ms" -f $startAfter, $vulns.Count, ($t1 - $t0), ($clock.ElapsedMilliseconds - $t1)))
+                    $log.Add(("GET {0}: {1} items, request {2} ms, parse {3} ms" -f $path, $vulns.Count, ($t1 - $t0), ($clock.ElapsedMilliseconds - $t1)))
 
                     foreach ($v in $vulns) {
                         $w.WriteStartElement('Vulnerabilities')
@@ -185,12 +189,13 @@ function Start-CyberInsightGet {
                         if (-not $resp.IsSuccess) { throw "Vulnerability devices failed: HTTP $($resp.StatusCode) $($resp.StatusDescription)" }
                         $t1 = $clock.ElapsedMilliseconds
                         $parsed = $resp.Body | ConvertFrom-Json
-                        $vCiDevs = if ($null -eq $parsed) { @() } else { @($parsed) }
+                        $vCiDevs = @(); if ($null -ne $parsed) { $vCiDevs = @($parsed) }
                         $resp = $null
-                        $log.Add(("vulnerabilities/devices start_after={0}: {1} items, request {2} ms, parse {3} ms" -f $startAfter, $vCiDevs.Count, ($t1 - $t0), ($clock.ElapsedMilliseconds - $t1)))
+                        $log.Add(("GET {0}: {1} items, request {2} ms, parse {3} ms" -f $path, $vCiDevs.Count, ($t1 - $t0), ($clock.ElapsedMilliseconds - $t1)))
 
                         foreach ($vCi in $vCiDevs) {
-                            $ciId = $Intern.GetOrAdd([string]$vCi.ci_id, [string]$vCi.ci_id)   # one shared string instance per vulnerability id
+                            $ciText = ConvertTo-CIXmlText $vCi.ci_id                  # sanitized once here, so the device writer can write it as is
+                            $ciId = $Intern.GetOrAdd($ciText, $ciText)                # one shared string instance per vulnerability id
                             foreach ($d in $vCi.devices) {
                                 $deviceKey = if ($KeyProperty -eq 'Name') { [string]$d.name } else { [string]$d.id }
                                 if ([string]::IsNullOrWhiteSpace($deviceKey)) { continue }
@@ -266,6 +271,9 @@ function Start-CyberInsightGet {
         $deviceMap = New-Object 'System.Collections.Generic.Dictionary[string,System.Collections.Generic.List[object]]' ([System.StringComparer]::OrdinalIgnoreCase)
         $intern    = New-Object 'System.Collections.Concurrent.ConcurrentDictionary[string,string]'
 
+        # Read-only settings handed to the workers (each worker builds its own context + token from them)
+        $workerCfg = @{ ApiUrl = $ctx.ApiUrl; ApiKey = $ctx.ApiKey; Language = $ctx.Language; ProxyConfig = $ctx.Common.ProxyConfig; Version = [string]$ctx.Common.Version }
+
         $dop  = [Math]::Max(1, [int]$ctx.Parallelism)
         $pool = New-CIWorkerPool -Parallelism $dop
 
@@ -286,8 +294,9 @@ function Start-CyberInsightGet {
                 $nextIndex++
 
                 $timestamp   = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
-                $safeName    = New-SafeFileName $sw.software_name
-                $safeVersion = New-SafeFileName $sw.software_version
+                # Bounded name parts (the software id keeps the file name unique) so that <DataDir>\<name>.inv.tmp stays below MAX_PATH
+                $safeName    = New-SafeFileName $sw.software_name -MaxLength 80
+                $safeVersion = New-SafeFileName $sw.software_version -MaxLength 40
                 $filePath    = Join-Path $ctx.Common.DataDir ("{0}_ci_{1}_{2}_{3}.inv" -f $timestamp, $safeName, $safeVersion, $sw.id)
 
                 Notify -name "$($sw.software_name) [$($sw.software_version)]" -itemName "Vulnerabilities" -message "Loading" -category "Info" -state "Executing" -itemResult "None"
@@ -295,7 +304,7 @@ function Start-CyberInsightGet {
                 $ps = [System.Management.Automation.PowerShell]::Create()
                 $ps.RunspacePool = $pool
                 [void]$ps.AddScript($ciWorker.ToString())
-                [void]$ps.AddArgument($ctx).AddArgument([string]$companyId).AddArgument($sw).AddArgument($filePath).AddArgument([string]$ctx.Common.Version)
+                [void]$ps.AddArgument($workerCfg).AddArgument([string]$companyId).AddArgument($sw).AddArgument($filePath).AddArgument([string]$ctx.Common.Version)
                 [void]$ps.AddArgument($vulnPageSize).AddArgument($devPageSize).AddArgument([string]$ctx.Criticality).AddArgument([string]$ctx.KeyProperty).AddArgument($intern)
                 $running.Add([pscustomobject]@{ Ps = $ps; Handle = $ps.BeginInvoke(); Sw = $sw })
             }
@@ -440,7 +449,7 @@ function Start-CyberInsightGet {
                     foreach ($ciId in $entries[$e + 1]) {
                         $w.WriteStartElement('Vulnerabilities')
                         $w.WriteElementString('SoftwareId', $swId)
-                        $w.WriteElementString('Name', (ConvertTo-CIXmlText $ciId))
+                        $w.WriteElementString('Name', $ciId)
                         $w.WriteEndElement()
                     }
                 }
