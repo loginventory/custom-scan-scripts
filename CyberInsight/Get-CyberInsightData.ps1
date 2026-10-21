@@ -15,7 +15,7 @@
       7) Emit the differential cleanup .inv and one .inv file per device
 
     Key features:
-      * Parallel workers (CyberInsightParallelism, default 8), each with its own bearer token
+      * Parallel workers (CyberInsightParallelism, default 4), each with its own bearer token
       * Retries with backoff for transient errors (network/DNS, 408/429/5xx), also for token requests
       * A software that keeps failing is reported and skipped; the run continues
         (a long streak of consecutive failures aborts the run)

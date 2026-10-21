@@ -91,9 +91,9 @@ function Resolve-CI-EffConfig {
     else { Write-CommonDebug -Context $Common -Message ("CyberInsightCompressionMinSizeKB='{0}' is not a non-negative integer; using default {1} KB" -f $minSizeKbRaw, $minSizeKb) }
 
     # --- Parallel workers for the GET run (per-software vulnerability + device requests) ---
-    #   CyberInsightParallelism : number of concurrent workers (default 8, range 1..32)
+    #   CyberInsightParallelism : number of concurrent workers (default 4, range 1..32)
     $parallelRaw = Get-EffectiveValue -Primary $Parameters -Fallback $fileCfg -Name 'CyberInsightParallelism' -As string -Default '8'
-    $parallelism = 8
+    $parallelism = 4
     $parsedPar   = 0
     if ([int]::TryParse(([string]$parallelRaw).Trim(), [ref]$parsedPar) -and $parsedPar -ge 1) { $parallelism = [Math]::Min(32, $parsedPar) }
     else { Write-CommonDebug -Context $Common -Message ("CyberInsightParallelism='{0}' is not a positive integer; using default {1}" -f $parallelRaw, $parallelism) }

@@ -39,7 +39,7 @@
     </setting>
 
     <setting name="CyberInsightParallelism" serializeAs="String">
-        <value>8</value> <!-- Action=Get: number of parallel workers loading vulnerabilities/devices per software (1-32, default 8) -->
+        <value>4</value> <!-- Action=Get: number of parallel workers loading vulnerabilities/devices per software (1-32, default 4) -->
     </setting>
 
     Gzip request compression (see https://documentation-433337190849.europe-west3.run.app/gzip-compression/):
