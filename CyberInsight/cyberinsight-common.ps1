@@ -92,7 +92,7 @@ function Resolve-CI-EffConfig {
 
     # --- Parallel workers for the GET run (per-software vulnerability + device requests) ---
     #   CyberInsightParallelism : number of concurrent workers (default 4, range 1..32)
-    $parallelRaw = Get-EffectiveValue -Primary $Parameters -Fallback $fileCfg -Name 'CyberInsightParallelism' -As string -Default '8'
+    $parallelRaw = Get-EffectiveValue -Primary $Parameters -Fallback $fileCfg -Name 'CyberInsightParallelism' -As string -Default '4'
     $parallelism = 4
     $parsedPar   = 0
     if ([int]::TryParse(([string]$parallelRaw).Trim(), [ref]$parsedPar) -and $parsedPar -ge 1) { $parallelism = [Math]::Min(32, $parsedPar) }
