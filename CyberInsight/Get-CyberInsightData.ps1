@@ -385,13 +385,14 @@ function Start-CyberInsightGet {
         Push-Location
         try {
             Set-Location ("LI:\" + $location)
-            $left = Get-LiData |
+            # @(...): an empty LI query (first run) must yield an empty array, not $null
+            $left = @(Get-LiData |
             Select-Object `
                 @{n='Name';      e={$_.'SoftwarePackage.Name'}},
                 @{n='Version';   e={$_.'SoftwarePackage.Version'}},
                 @{n='Publisher'; e={$_.'SoftwarePackage.Publisher'}},
                 @{n='Platform'; e={$_.'SoftwarePackage.Platform'}} |
-            Sort-Object Name, Version, Publisher, Platform -Unique
+            Sort-Object Name, Version, Publisher, Platform -Unique)
 
 
             $right = $softwareList | Select-Object `
@@ -401,10 +402,14 @@ function Start-CyberInsightGet {
                 @{n='Platform'; e={$_.software_metadata}}
 
             # Nur Eintraege, die NUR in $left vorkommen
-            $missing = Compare-Object -ReferenceObject $left -DifferenceObject $right `
-                    -Property Name,Version,Publisher,Platform -PassThru |
-                    Where-Object SideIndicator -eq '<=' |
-                    Sort-Object Name,Version,Publisher,Platform -Unique
+            # Nothing exported yet (empty $left): nothing to clean up; Compare-Object rejects an empty ReferenceObject
+            $missing = @()
+            if ($left.Count -gt 0) {
+                $missing = Compare-Object -ReferenceObject $left -DifferenceObject $right `
+                        -Property Name,Version,Publisher,Platform -PassThru |
+                        Where-Object SideIndicator -eq '<=' |
+                        Sort-Object Name,Version,Publisher,Platform -Unique
+            }
 
             if ($missing) {
                 foreach ($sw in $missing) {
