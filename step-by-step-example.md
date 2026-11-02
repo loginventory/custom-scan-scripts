@@ -12,19 +12,13 @@ Sollte ein hier erwähntes Verzeichnis lokal noch nicht existieren, erstellen Si
 1. Laden Sie die für Ihr System passende Powershell Core Version von [PowerShell GitHub](https://github.com/PowerShell/PowerShell) herunter und installieren Sie diese. **Wichtig:** Die in Windows enthaltene Powershell Version (5.x) ist nicht ausreichend.
 2. Starten Sie das System neu.
 3. Besuchen Sie das [LOGINventory Custom-Scan-Scripts GitHub Repository](https://github.com/loginventory/custom-scan-scripts).
-4. Laden Sie die common.ps1 aus dem Repository `include` Ordner herunter und kopieren Sie diese nach `INSTALLDIR\Resources\Agents\include`.
+4. Laden Sie die Dateien common.ps1 und WebRequest.ps1 aus dem Repository `include` Ordner herunter und kopieren Sie diese nach `INSTALLDIR\Resources\Agents\include`.
    
 
 ### Vorbereitung für dieses Skript:
 
 1. Laden Sie die Datei `AzureAd-Devices-Compliant.ps1` herunter und kopieren Sie diese nach `INSTALLDIR\Resources\Agents`.
-2. Installieren Sie die nötigen Powershell Module über die Powershell:
-
-```
-Install-Module Microsoft.Graph
-Install-Module Microsoft.Graph.Authentication
-Install-Module Microsoft.Graph.Users
-```
+2. Erteilen Sie Ihrer App Registration die Microsoft Graph Berechtigungen `Device.Read.All` und `User.Read.All` (Typ "Application permissions", mit "Admin Consent granted"). Zusätzliche PowerShell-Module werden nicht benötigt, das Skript spricht Microsoft Graph direkt an.
 3. Starten Sie die LOGINventory Konsole, wählen Sie *Remote Scanner*, *Definitionen*, *Neu* -> *Skriptbasierte Inventarisierung*.
 4. Wählen Sie unter *Skript* das entsprechende Skript (`AzureAd-Devices-Compliant`) aus und wechseln Sie zum Tab *Parameter*.
 
