@@ -108,9 +108,9 @@ try {
         }
     }
     if ($countAddedUsers -gt 0){
-        Notify -name "Writing Data" -itemName "CSV" -message $filePath -category "Info" -state "None" -itemResult "Ok"        
+        Notify -name "Writing Data" -itemName "CSV" -message $filePath -category "Info" -state "Executing" -itemResult "None"
         WriteInv -filePath $filePath -version $ctx.Version
-        Notify -name "Writing Data Done" -itemName "CSV" -message $filePath -category "Info" -state "Finished" -itemResult "Ok"
+        Notify -name "Writing Data" -itemName "CSV" -message $filePath -category "Info" -state "Finished" -itemResult "Ok"
     }
 }      
 catch {
