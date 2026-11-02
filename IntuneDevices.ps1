@@ -264,7 +264,7 @@ $graphHeaders = @{
 
 # --- Retrieve Intune device information (managed devices) ------------------------------
 
-$deviceFields = 'deviceName,managedDeviceName,model,manufacturer,operatingSystem,osVersion,userId,imei,wiFiMacAddress,phoneNumber,serialNumber,totalStorageSpaceInBytes,freeStorageSpaceInBytes,enrolledDateTime,subscriberCarrier'
+$deviceFields = 'id,deviceName,managedDeviceName,model,manufacturer,operatingSystem,osVersion,userId,imei,wiFiMacAddress,phoneNumber,serialNumber,totalStorageSpaceInBytes,freeStorageSpaceInBytes,enrolledDateTime,subscriberCarrier'
 $devicesUri = 'https://graph.microsoft.com/v1.0/deviceManagement/managedDevices?$select=' + $deviceFields
 
 try {
@@ -273,6 +273,24 @@ try {
 catch {
     Notify -name "Error" -itemName "Intune Devices" -message "$($_.Exception.Message)" -category "Error" -state "Faulty" -itemResult "Error"
     exit 1
+}
+
+# Mobile devices are named by managedDeviceName. If the list returned it empty, read the single device
+# (the single-device request returns the full property set).
+foreach ($device in $devices) {
+    if ($device.operatingSystem -in @("iOS", "Android") -and -not (HasValue $device.managedDeviceName) -and (HasValue $device.id)) {
+        $uri = 'https://graph.microsoft.com/v1.0/deviceManagement/managedDevices/' + [uri]::EscapeDataString([string]$device.id)
+        try {
+            $single = Invoke-GraphGet -Uri $uri -Headers $graphHeaders -Permission 'DeviceManagementManagedDevices.Read.All'
+            Write-CommonDebug -Context $ctx -Message "managedDeviceName missing in list for $($device.id), single request returned '$($single.managedDeviceName)'"
+            if (HasValue $single.managedDeviceName) {
+                $device | Add-Member -NotePropertyName 'managedDeviceName' -NotePropertyValue $single.managedDeviceName -Force
+            }
+        }
+        catch {
+            Write-CommonDebug -Context $ctx -Message "Single request for $($device.id) failed: $($_.Exception.Message)"
+        }
+    }
 }
 
 $numberOfMobileDevices = $devices | Where-Object { $_.operatingSystem -in @("iOS", "Android") } | Measure-Object | Select-Object -ExpandProperty Count
@@ -316,10 +334,18 @@ foreach($device in $devices) {
     if ($device.operatingSystem -in @("iOS", "Android")) {
         $chassisType = "Mobile"
         $name = $device.managedDeviceName
+        # Some devices have no managedDeviceName at all: use the device name instead
+        if (-not (HasValue $name)) { $name = $device.deviceName }
     }
 
     # Skip non-mobile devices if "scanOnlyMobileDevices" is true
     if ($scanOnlyMobileDevices -eq "true" -and $chassisType -ne "Mobile") {
+        continue
+    }
+
+    # A device without any name cannot be stored in LOGINventory
+    if (-not (HasValue $name)) {
+        Notify -name "Device without name" -itemName "Inventory" -message "Skipped an Intune device without name (Intune id $($device.id), serial number $($device.serialNumber))." -category "Info" -state "Finished" -ItemResult "None"
         continue
     }
 
