@@ -166,9 +166,9 @@ try {
         }
     }
 
-    Notify -name "Writing Data" -itemName "JetApi" -message $filePath -category "Info" -state "Running"
+    Notify -name "Writing Data" -itemName "JetApi" -message $filePath -category "Info" -state "Executing"
     WriteInv -filePath $filePath -version $ctx.Version
-    Notify -name "Writing Data Done" -itemName "JetApi" -message $filePath -category "Info" -state "Finished" -itemResult "Ok"
+    Notify -name "Writing Data" -itemName "JetApi" -message $filePath -category "Info" -state "Finished" -itemResult "Ok"
 }
 catch {
     Notify -name "JetApi" -itemName "Error" -message "$_ - $($_.InvocationInfo.ScriptLineNumber)" -category "Error"  -state "Faulty" -itemResult "Error"

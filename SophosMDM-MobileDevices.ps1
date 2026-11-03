@@ -160,7 +160,7 @@ do {
 
 } while ($pagesTotal -and $page -le $pagesTotal)
 
-Notify -name "Information" -itemName "Evaluation" -itemResult "None" "Number of devices found: $($allDeviceIds.Count)" -category "Info" -state "Detecting"
+Notify -name "Information" -itemName "Evaluation" -itemResult "Ok" "Number of devices found: $($allDeviceIds.Count)" -category "Info" -state "Finished"
 
 if ($allDeviceIds.Count -eq 0) {
     Write-CommonDebug -Context $ctx -Message "No devices found – nothing to retrieve details for."
@@ -219,6 +219,8 @@ foreach ($id in $allDeviceIds) {
     # Slight delay to avoid rate limiting
     Start-Sleep -Milliseconds 100
 }
+
+Notify -name "Getting Data" -itemName "Getting Data" -itemResult "Ok" -message "Device details loaded: $($fullDevices.Count)/$total" -category "Info" -state "Finished"
 
 Write-CommonDebug -Context $ctx -Message "Number of successfully loaded detail objects: $($fullDevices.Count)"
 

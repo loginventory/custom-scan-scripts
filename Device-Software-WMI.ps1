@@ -82,6 +82,6 @@ foreach ($computerName in $computers) {
     }     
 }
 
-Notify -name "WMI" -itemName "Writing Data $($elements.Count) Elements" -message $filePath -category "Info" -state "None"
+Notify -name "Writing Data" -itemName "Writing Data $($elements.Count) Elements" -message $filePath -category "Info" -state "Executing"
 WriteInv -filePath $filePath -version $ctx.Version
-Notify -name "WMI-" -itemName "Writing Data Done" -message $filePath -category "Info" -state "Finished"
+Notify -name "Writing Data" -itemName "Writing Data Done" -message $filePath -category "Info" -state "Finished" -itemResult "Ok"
