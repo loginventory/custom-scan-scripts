@@ -123,7 +123,7 @@ if ($responseGetAssets.errors -and $responseGetAssets.errors.Count -gt 0) {
 } else {
     $listCount = ($responseGetAssets.result | Get-Member -MemberType Properties).Count
     # Ausgabe der Anzahl an gefundenen Geräten an den Job Monitor
-    Notify -name "Information" -itemName "Auswertung" -itemResult "Ok" -message "Es wurden $listCount Assets gefunden" -category "Info" -state "Finished"
+    Notify -name "Information" -itemName "Auswertung" -itemResult "None" -message "Es wurden $listCount Assets gefunden" -category "Info" -state "Detecting"
 }
 
 function Convert-ToUtc {
