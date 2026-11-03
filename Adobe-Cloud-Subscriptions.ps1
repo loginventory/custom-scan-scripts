@@ -80,17 +80,18 @@ function Get-Access-Token {
         [Parameter(Mandatory = $false)]
         [hashtable]$Headers = @{ "Content-Type" = "application/x-www-form-urlencoded" }
     )
-    Notify -name "Getting Access Token" -itemName "Getting Access Token" -itemResult "None" -message "Getting Access Token from $Uri" -category "Info" -state "None"
+    Notify -name "Getting Access Token" -itemName "Getting Access Token" -itemResult "None" -message "Getting Access Token from $Uri" -category "Info" -state "Executing"
 
     $body = ConvertTo-UrlEncoded -Hashtable $FormData
     $resp = Invoke-LoginWebRequest -Uri $Uri -Method POST -Body $body -Headers $Headers -ProxyConfig $ctx.ProxyConfig -DebugFile $ctx.DebugFile
 
     if (-not $resp.IsSuccess) {
+        Notify -name "Getting Access Token" -itemName "Getting Access Token" -itemResult "Error" -message "Failed to get access token: HTTP $($resp.StatusCode) $($resp.StatusDescription)" -category "Error" -state "Faulty"
         Write-Error "Failed to get access token: HTTP $($resp.StatusCode) $($resp.StatusDescription)"
         return $null
     }
 
-    Notify -name "Response Received" -itemName "Response Received" -itemResult "None" -message "Access Token Granted" -category "Info" -state "Finished"
+    Notify -name "Getting Access Token" -itemName "Getting Access Token" -itemResult "Ok" -message "Access Token Granted" -category "Info" -state "Finished"
     return ($resp.Body | ConvertFrom-Json)
 }
 
@@ -124,7 +125,7 @@ $groupsResponse = @()
 $orgGroupsUri = "$userManagementUri/usermanagement/groups/$organizationId/$groupindex"
 $usersUri = "$userManagementUri/usermanagement/users/$organizationId/$userindex"
 
-Notify -name "Requesting Users and Groups" -itemName "Requesting Users and Groups" -itemResult "None" -message "Requesting Users and Groups from Adobe Management API" -category "Info" -state "None"
+Notify -name "Requesting Users and Groups" -itemName "Requesting Users and Groups" -itemResult "None" -message "Requesting Users and Groups from Adobe Management API" -category "Info" -state "Executing"
 
 while ($lastPageUsers -eq $false) {
     $resp = Invoke-LoginWebRequest -Uri $usersUri -Method GET -Headers $groupHeaders -ProxyConfig $ctx.ProxyConfig -DebugFile $ctx.DebugFile
@@ -132,9 +133,10 @@ while ($lastPageUsers -eq $false) {
     if (-not $resp.IsSuccess) {
         if ($resp.StatusCode -eq 429) {
             $retryAfter = if ($resp.Headers -and $resp.Headers["Retry-After"]) { $resp.Headers["Retry-After"] } else { "unknown" }
-            Notify -name "Request Failed" -itemName "Request Failed" -itemResult "Error" -message "Too many requests. Retry after $retryAfter seconds." -category "Error" -state "Faulty"
-            exit
+            Notify -name "Requesting Users and Groups" -itemName "Request Failed" -itemResult "Error" -message "Too many requests. Retry after $retryAfter seconds." -category "Error" -state "Faulty"
+            exit 1
         }
+        Notify -name "Requesting Users and Groups" -itemName "Request Failed" -itemResult "Error" -message "Fehler beim Abrufen der Users: HTTP $($resp.StatusCode) $($resp.StatusDescription)" -category "Error" -state "Faulty"
         Write-Host "Fehler beim Abrufen der Users: HTTP $($resp.StatusCode) $($resp.StatusDescription)"
         exit 1
     }
@@ -155,9 +157,11 @@ while ($lastPageGroups -eq $false) {
     if (-not $resp2.IsSuccess) {
         if ($resp2.StatusCode -eq 429) {
             $retryAfter = if ($resp2.Headers -and $resp2.Headers["Retry-After"]) { $resp2.Headers["Retry-After"] } else { "unknown" }
+            Notify -name "Requesting Users and Groups" -itemName "Request Failed" -itemResult "Error" -message "Too many requests. Retry after $retryAfter seconds." -category "Error" -state "Faulty"
             Write-Host "Too many requests. Retry after $retryAfter seconds."
-            exit
+            exit 1
         }
+        Notify -name "Requesting Users and Groups" -itemName "Request Failed" -itemResult "Error" -message "Fehler beim Abrufen der Groups: HTTP $($resp2.StatusCode) $($resp2.StatusDescription)" -category "Error" -state "Faulty"
         Write-Host "Fehler beim Abrufen der Groups: HTTP $($resp2.StatusCode) $($resp2.StatusDescription)"
         exit 1
     }
@@ -171,6 +175,8 @@ while ($lastPageGroups -eq $false) {
         $lastPageGroups = $true
     }
 }
+
+Notify -name "Requesting Users and Groups" -itemName "Requesting Users and Groups" -itemResult "Ok" -message "Got $(@($usersResponse).Count) users and $(@($groupsResponse).Count) groups" -category "Info" -state "Finished"
 
 # Only product profiles represent licenses. A USER_GROUP can also carry a licenseQuota
 # but has no productName, so require productName to avoid pulling in non-product groups.
@@ -274,6 +280,6 @@ foreach ($lic in $pendingLicenses) {
     AddPropertyValue -name "Kind{Editable:true}" -value "0"
 }
 
-Notify -name "Writing Data" -itemName "AdobeApi" -message $filePath -category "Info" -state "Running"
+Notify -name "Writing Data" -itemName "AdobeApi" -message $filePath -category "Info" -state "Executing"
 WriteInv -filePath $filePath -version $ctx.Version
-Notify -name "Writing Data Done" -itemName "AdobeApi" -message "-" -category "Info" -state "Finished" -itemResult "Ok"
+Notify -name "Writing Data" -itemName "AdobeApi" -message $filePath -category "Info" -state "Finished" -itemResult "Ok"

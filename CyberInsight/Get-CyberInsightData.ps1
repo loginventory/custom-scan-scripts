@@ -390,6 +390,12 @@ function Start-CyberInsightGet {
         }
 
         if ($aborted) {
+            # Close the job monitor rows of software that was still running or queued
+            $pending = @($running | ForEach-Object { $_.Sw })
+            if ($nextIndex -lt $total) { $pending += @($softwareList.GetRange($nextIndex, $total - $nextIndex)) }
+            foreach ($sw in $pending) {
+                Notify -name "$($sw.software_name) [$($sw.software_version)]" -itemName "Vulnerabilities" -message "Aborted" -category "Warning" -state "Aborted" -itemResult "Canceled"
+            }
             throw ("Aborted after {0} consecutive failed software requests; device mapping was not written." -f $failStreak)
         }
 
@@ -450,6 +456,9 @@ function Start-CyberInsightGet {
                 $filePath  = Join-Path $ctx.Common.DataDir $fileName
                 Write-CommonDebug -Context $ctx.Common -Message ("Writing INV to {0}" -f $filePath)
                 WriteInv -filePath $filePath -version $ctx.Common.Version -useDataNamespace $true
+                foreach ($sw in $missing) {
+                    Notify -name "$($sw.Name) [$($sw.Version)]" -itemName "Vulnerabilities" -message "Differentials" -category "Info" -state "Finished" -itemResult "Ok"
+                }
             }
         }
         finally {

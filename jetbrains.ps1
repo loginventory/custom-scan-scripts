@@ -64,6 +64,7 @@ function Get-SkuId {
     return "$($item.product.code)"
 }
 
+$writingStarted = $false
 try {
 
     $resp = Invoke-LoginWebRequest -Uri $uri -Method GET -Headers $headers -ProxyConfig $ctx.ProxyConfig -DebugFile $ctx.DebugFile
@@ -166,10 +167,14 @@ try {
         }
     }
 
-    Notify -name "Writing Data" -itemName "JetApi" -message $filePath -category "Info" -state "Running"
+    Notify -name "Writing Data" -itemName "JetApi" -message $filePath -category "Info" -state "Executing"
+    $writingStarted = $true
     WriteInv -filePath $filePath -version $ctx.Version
-    Notify -name "Writing Data Done" -itemName "JetApi" -message $filePath -category "Info" -state "Finished" -itemResult "Ok"
+    Notify -name "Writing Data" -itemName "JetApi" -message $filePath -category "Info" -state "Finished" -itemResult "Ok"
 }
 catch {
+    if ($writingStarted) {
+        Notify -name "Writing Data" -itemName "JetApi" -message "$_" -category "Error" -state "Faulty" -itemResult "Error"
+    }
     Notify -name "JetApi" -itemName "Error" -message "$_ - $($_.InvocationInfo.ScriptLineNumber)" -category "Error"  -state "Faulty" -itemResult "Error"
 }
