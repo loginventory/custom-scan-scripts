@@ -124,6 +124,7 @@ $allDeviceIds = @()
 
 $page       = 1
 $pagesTotal = $null
+$listError  = $null
 
 do {
     $query   = "page=$page&pageSize=$pageSize&pageTotal=true"
@@ -135,6 +136,7 @@ do {
 
     if (-not $listResp.IsSuccess) {
         Write-CommonDebug -Context $ctx -Message "Page ${page}: HTTP error $($listResp.StatusCode) -> breaking list loop."
+        $listError = "Device list page ${page} failed: HTTP $($listResp.StatusCode) $($listResp.StatusDescription)"
         break
     }
 
@@ -160,7 +162,13 @@ do {
 
 } while ($pagesTotal -and $page -le $pagesTotal)
 
-Notify -name "Information" -itemName "Evaluation" -itemResult "Ok" "Number of devices found: $($allDeviceIds.Count)" -category "Info" -state "Finished"
+if ($listError) {
+    Notify -name "Information" -itemName "Evaluation" -itemResult "Error" -message "$listError (devices found so far: $($allDeviceIds.Count))" -category "Error" -state "Faulty"
+    if ($allDeviceIds.Count -eq 0) { exit 1 }
+}
+else {
+    Notify -name "Information" -itemName "Evaluation" -itemResult "Ok" -message "Number of devices found: $($allDeviceIds.Count)" -category "Info" -state "Finished"
+}
 
 if ($allDeviceIds.Count -eq 0) {
     Write-CommonDebug -Context $ctx -Message "No devices found – nothing to retrieve details for."
@@ -220,7 +228,12 @@ foreach ($id in $allDeviceIds) {
     Start-Sleep -Milliseconds 100
 }
 
-Notify -name "Getting Data" -itemName "Getting Data" -itemResult "Ok" -message "Device details loaded: $($fullDevices.Count)/$total" -category "Info" -state "Finished"
+if ($fullDevices.Count -lt $total) {
+    Notify -name "Getting Data" -itemName "Getting Data" -itemResult "Error" -message "Device details loaded: $($fullDevices.Count)/$total (see debug log)" -category "Error" -state "Faulty"
+}
+else {
+    Notify -name "Getting Data" -itemName "Getting Data" -itemResult "Ok" -message "Device details loaded: $($fullDevices.Count)/$total" -category "Info" -state "Finished"
+}
 
 Write-CommonDebug -Context $ctx -Message "Number of successfully loaded detail objects: $($fullDevices.Count)"
 

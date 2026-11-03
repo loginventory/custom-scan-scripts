@@ -66,6 +66,7 @@ $count = $users.Length
 Notify -name "Reading csv file" -message "$($count) Users found" -itemName "$($csvPath)" -category "Info" -state "Finished" -itemResult "Ok"
 
 $countAddedUsers=0
+$writingStarted = $false
 try {
     foreach ($user in $users) {
         # Write all "UserAccount" properties
@@ -109,10 +110,14 @@ try {
     }
     if ($countAddedUsers -gt 0){
         Notify -name "Writing Data" -itemName "CSV" -message $filePath -category "Info" -state "Executing" -itemResult "None"
+        $writingStarted = $true
         WriteInv -filePath $filePath -version $ctx.Version
         Notify -name "Writing Data" -itemName "CSV" -message $filePath -category "Info" -state "Finished" -itemResult "Ok"
     }
 }      
 catch {
+    if ($writingStarted) {
+        Notify -name "Writing Data" -itemName "CSV" -message "$_" -category "Error" -state "Faulty" -itemResult "Error"
+    }
     Notify -name "ERROR" -itemName "Error" -message "$_ - $($_.InvocationInfo.ScriptLineNumber)" -category "Error"  -state "Faulty" -itemResult "Error"
 }

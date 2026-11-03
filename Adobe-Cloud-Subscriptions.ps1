@@ -134,7 +134,7 @@ while ($lastPageUsers -eq $false) {
         if ($resp.StatusCode -eq 429) {
             $retryAfter = if ($resp.Headers -and $resp.Headers["Retry-After"]) { $resp.Headers["Retry-After"] } else { "unknown" }
             Notify -name "Requesting Users and Groups" -itemName "Request Failed" -itemResult "Error" -message "Too many requests. Retry after $retryAfter seconds." -category "Error" -state "Faulty"
-            exit
+            exit 1
         }
         Notify -name "Requesting Users and Groups" -itemName "Request Failed" -itemResult "Error" -message "Fehler beim Abrufen der Users: HTTP $($resp.StatusCode) $($resp.StatusDescription)" -category "Error" -state "Faulty"
         Write-Host "Fehler beim Abrufen der Users: HTTP $($resp.StatusCode) $($resp.StatusDescription)"
@@ -159,7 +159,7 @@ while ($lastPageGroups -eq $false) {
             $retryAfter = if ($resp2.Headers -and $resp2.Headers["Retry-After"]) { $resp2.Headers["Retry-After"] } else { "unknown" }
             Notify -name "Requesting Users and Groups" -itemName "Request Failed" -itemResult "Error" -message "Too many requests. Retry after $retryAfter seconds." -category "Error" -state "Faulty"
             Write-Host "Too many requests. Retry after $retryAfter seconds."
-            exit
+            exit 1
         }
         Notify -name "Requesting Users and Groups" -itemName "Request Failed" -itemResult "Error" -message "Fehler beim Abrufen der Groups: HTTP $($resp2.StatusCode) $($resp2.StatusDescription)" -category "Error" -state "Faulty"
         Write-Host "Fehler beim Abrufen der Groups: HTTP $($resp2.StatusCode) $($resp2.StatusDescription)"
