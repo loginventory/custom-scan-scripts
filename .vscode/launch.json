@@ -20,6 +20,16 @@
         "args": [
           "-parameter \"dataDir,C:/Users/Public/Documents/LOGIN/LOGINventory 9/Data#version,9.9#params,@{Action=Get}\""
         ]
+      },
+      {
+        "name": "FortiManager Devices",
+        "type": "PowerShell",
+        "request": "launch",
+        "script": "${workspaceFolder}/FortiManager-Devices.ps1",
+        "cwd": "${workspaceFolder}",
+        "args": [
+          "-parameter \"dataDir,C:/temp/fmg#version,9.12#params,@{fmgHost=fortimanager.example.local; apiKey=<API-KEY>; skipCertificateCheck=true; rawDumpDir=C:/temp/fmg/raw; DebugFile=C:/temp/fmg/debug.txt}\""
+        ]
       }
     ]
   }
