@@ -189,15 +189,19 @@ function ConvertTo-GraphModuleDateString {
 function Get-OwnerMap {
     <#
     .SYNOPSIS
-        Looks up users by id and returns a hashtable id -> user (id, onPremisesDomainName, onPremisesSamAccountName).
-        Users that no longer exist are simply missing from the result.
+        Looks up users by id. Returns @{ Owners = hashtable id -> user (id, onPremisesDomainName,
+        onPremisesSamAccountName); FailedCount = number of users whose lookup failed }.
+        Users that no longer exist are simply missing from Owners.
     .DESCRIPTION
         Uses "id in (...)" with 15 ids per request (Graph limit). If Graph rejects the filter (HTTP 400),
         falls back to one request per user.
+        A failed request only loses the owners it covers; owners found so far are kept.
+        HTTP 403 (permission missing) is thrown, because every further request would fail the same way.
     #>
     param([string[]]$UserIds, [hashtable]$Headers)
 
     $map = @{}
+    $failed = 0
     $select = '$select=id,onPremisesDomainName,onPremisesSamAccountName'
     $useFilter = $true
     $chunkSize = 15
@@ -215,7 +219,13 @@ function Get-OwnerMap {
                 continue
             }
             catch {
-                if ($_.Exception.Data['StatusCode'] -ne 400) { throw }
+                $status = $_.Exception.Data['StatusCode']
+                if ($status -eq 403) { throw }
+                if ($status -ne 400) {
+                    Write-CommonDebug -Context $ctx -Message "Owner lookup for $($chunk.Count) users failed: $($_.Exception.Message)"
+                    $failed += $chunk.Count
+                    continue
+                }
                 Write-CommonDebug -Context $ctx -Message "User filter rejected ($($_.Exception.Message)), falling back to one request per user"
                 $useFilter = $false
             }
@@ -227,13 +237,17 @@ function Get-OwnerMap {
                 $map[$id] = Invoke-GraphGet -Uri $uri -Headers $Headers -Permission 'User.Read.All'
             }
             catch {
-                # Like before: users that no longer exist (or invalid ids) are ignored.
                 $status = $_.Exception.Data['StatusCode']
-                if ($status -ne 404 -and $status -ne 400) { throw }
+                if ($status -eq 403) { throw }
+                # Like before: users that no longer exist (or invalid ids) are ignored.
+                if ($status -ne 404 -and $status -ne 400) {
+                    Write-CommonDebug -Context $ctx -Message "Owner lookup for user $id failed: $($_.Exception.Message)"
+                    $failed++
+                }
             }
         }
     }
-    return $map
+    return @{ Owners = $map; FailedCount = $failed }
 }
 
 # --- Parameters ---------------------------------------------------------------------------
@@ -315,10 +329,20 @@ $ownerIds = @($devices |
 $owners = @{}
 if ($ownerIds.Count -gt 0) {
     try {
-        $owners = Get-OwnerMap -UserIds $ownerIds -Headers $graphHeaders
+        $ownerLookup = Get-OwnerMap -UserIds $ownerIds -Headers $graphHeaders
+        $owners = $ownerLookup.Owners
+        if ($ownerLookup.FailedCount -gt 0) {
+            Notify -name "Owner Lookup" -itemName "Owner" -message "The owner of $($ownerLookup.FailedCount) of $($ownerIds.Count) users could not be read; the affected devices are inventoried without owner. Details in the debug log." -category "Info" -state "Finished"
+        }
     }
     catch {
-        Notify -name "Owner Lookup" -itemName "Owner" -message "Device owners could not be determined, devices are inventoried without owner. $($_.Exception.Message)" -category "Error" -state "Faulty" -itemResult "Error"
+        if ($_.Exception.Data['StatusCode'] -eq 403) {
+            # Not an error of the scan: the devices are complete, only the owner is missing (as in AzureAd-Devices-Compliant.ps1)
+            Notify -name "Owner Lookup" -itemName "Owner" -message "Devices are inventoried without owner, because the app registration may not read users. Grant the application permission 'User.Read.All' (admin consent required)." -category "Info" -state "Finished"
+        }
+        else {
+            Notify -name "Owner Lookup" -itemName "Owner" -message "Device owners could not be determined, devices are inventoried without owner. $($_.Exception.Message)" -category "Error" -state "Faulty" -itemResult "Error"
+        }
         $owners = @{}
     }
 }
@@ -333,9 +357,8 @@ foreach($device in $devices) {
     $name = $device.deviceName
     if ($device.operatingSystem -in @("iOS", "Android")) {
         $chassisType = "Mobile"
+        # No fallback to deviceName: it is often just "iPhone", so several devices would end up in one asset
         $name = $device.managedDeviceName
-        # Some devices have no managedDeviceName at all: use the device name instead
-        if (-not (HasValue $name)) { $name = $device.deviceName }
     }
 
     # Skip non-mobile devices if "scanOnlyMobileDevices" is true
@@ -343,9 +366,11 @@ foreach($device in $devices) {
         continue
     }
 
-    # A device without any name cannot be stored in LOGINventory
+    # A device without a usable name cannot be stored in LOGINventory.
+    # The Intune id is part of the name, so every skipped device gets its own Job Monitor row.
     if (-not (HasValue $name)) {
-        Notify -name "Device without name" -itemName "Inventory" -message "Skipped an Intune device without name (Intune id $($device.id), serial number $($device.serialNumber))." -category "Info" -state "Finished" -ItemResult "None"
+        $missingField = if ($chassisType -eq "Mobile") { "managedDeviceName" } else { "deviceName" }
+        Notify -name "Device without name ($($device.id))" -itemName "Inventory" -message "Skipped an Intune device without $missingField (Intune id $($device.id), device name '$($device.deviceName)', serial number $($device.serialNumber))." -category "Info" -state "Finished" -ItemResult "None"
         continue
     }
 
