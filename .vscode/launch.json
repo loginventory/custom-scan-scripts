@@ -5,8 +5,8 @@
         "name": "Upload CyberInsight Data",
         "type": "PowerShell",
         "request": "launch",
-        "script": "${workspaceFolder}/CyberInsight.ps1",
-        "cwd": "${workspaceFolder}",
+        "script": "${workspaceFolder}/catalog/CyberInsight.ps1",
+        "cwd": "${workspaceFolder}/catalog",
         "args": [
           "-parameter \"version,9.9#params,@{Action=Post}\""
         ]
@@ -15,12 +15,11 @@
         "name": "Download CyberInsight Data",
         "type": "PowerShell",
         "request": "launch",
-        "script": "${workspaceFolder}/CyberInsight.ps1",
-        "cwd": "${workspaceFolder}",
+        "script": "${workspaceFolder}/catalog/CyberInsight.ps1",
+        "cwd": "${workspaceFolder}/catalog",
         "args": [
           "-parameter \"dataDir,C:/Users/Public/Documents/LOGIN/LOGINventory 9/Data#version,9.9#params,@{Action=Get}\""
         ]
       }
     ]
   }
-  

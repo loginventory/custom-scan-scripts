@@ -1,3 +1,40 @@
+<# LI-MANIFEST
+{
+  "schema": 1,
+  "id": "sophos-mdm-mobile-devices",
+  "version": "1.0.0",
+  "tier": "login",
+  "maintainer": "Schmidt's LOGIN GmbH",
+  "title": { "de": "Sophos Mobile: mobile Geräte", "en": "Sophos Mobile devices" },
+  "summary": {
+    "de": "Liest Smartphones und Tablets über die Sophos Central API (Sophos Mobile) und legt sie als Assets an.",
+    "en": "Reads smartphones and tablets via the Sophos Central API (Sophos Mobile) and creates them as assets."
+  },
+  "category": "mdm",
+  "creates": ["Assets"],
+  "engine": "pwsh",
+  "requires": {
+    "modules": [],
+    "permissions": ["Sophos Central: API client (client ID and client secret), created by a Super Admin under Settings, API Connections"]
+  },
+  "endpoints": ["id.sophos.com", "api.central.sophos.com", "api-*.central.sophos.com"],
+  "testRun": true,
+  "docs": {
+    "de": "https://github.com/loginventory/custom-scan-agents/blob/main/catalog/SophosMDM-MobileDevices.ps1",
+    "en": "https://github.com/loginventory/custom-scan-agents/blob/main/catalog/SophosMDM-MobileDevices.ps1"
+  },
+  "parameters": [
+    {
+      "name": "clientId", "type": "string", "required": true,
+      "label": { "de": "Client-ID", "en": "Client ID" }
+    },
+    {
+      "name": "clientSecret", "type": "secret", "required": true,
+      "label": { "de": "Client-Secret", "en": "Client secret" }
+    }
+  ]
+}
+#>
 <#
 .SYNOPSIS
 A script to collect information about mobile devices from Sophos MDM.

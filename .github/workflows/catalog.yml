@@ -1,0 +1,52 @@
+name: Catalog checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+
+      - name: Fetch catalog.json of the latest release (baseline for stable file names)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $false
+          New-Item -ItemType Directory -Force -Path baseline | Out-Null
+          gh release download --repo ${{ github.repository }} --pattern catalog.json --dir baseline 2>$null
+          # No release yet, or none with catalog.json: gh exits 1, which must not fail the step
+          $global:LASTEXITCODE = 0
+          if (Test-Path baseline/catalog.json) {
+            "BASELINE_CATALOG=baseline/catalog.json" | Out-File -FilePath $env:GITHUB_ENV -Append
+            Write-Host "baseline: catalog.json of the latest release"
+          } else {
+            Write-Host "no release with catalog.json yet, stable file name check will be skipped"
+          }
+
+      - name: Check catalog
+        shell: pwsh
+        run: ./tools/Test-Catalog.ps1 -BaselineCatalogPath $env:BASELINE_CATALOG
+
+      - name: README table up to date
+        shell: pwsh
+        run: ./tools/Update-Readme.ps1 -Check
+
+      - name: Build package (unsigned, for inspection)
+        shell: pwsh
+        run: ./tools/New-CatalogPackage.ps1 -CatalogVersion 0.0.0-dev -OutputDir build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: catalog-package
+          path: |
+            build/scripts-catalog-0.0.0-dev.zip
+            build/catalog.json

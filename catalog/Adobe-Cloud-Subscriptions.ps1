@@ -1,3 +1,50 @@
+<# LI-MANIFEST
+{
+  "schema": 1,
+  "id": "adobe-cloud-subscriptions",
+  "version": "1.0.0",
+  "tier": "login",
+  "maintainer": "Schmidt's LOGIN GmbH",
+  "title": { "de": "Adobe Cloud-Abonnements", "en": "Adobe Cloud subscriptions" },
+  "summary": {
+    "de": "Liest Benutzer und ihre zugewiesenen Lizenzen über die Adobe User Management API (UMAPI) und legt sie als Cloud-Subscriptions und Lizenzen an.",
+    "en": "Reads users and their assigned licenses via the Adobe User Management API (UMAPI) and creates them as cloud subscriptions and licenses."
+  },
+  "category": "cloud-licenses",
+  "creates": ["Subscriptions", "Licenses"],
+  "engine": "pwsh",
+  "requires": {
+    "modules": [],
+    "permissions": ["Adobe Developer Console: server-to-server credentials for the User Management API (UMAPI)"]
+  },
+  "endpoints": ["ims-na1.adobelogin.com", "usermanagement.adobe.io"],
+  "testRun": true,
+  "docs": {
+    "de": "https://github.com/loginventory/custom-scan-agents/blob/main/catalog/Adobe-Cloud-Subscriptions.ps1",
+    "en": "https://github.com/loginventory/custom-scan-agents/blob/main/catalog/Adobe-Cloud-Subscriptions.ps1"
+  },
+  "parameters": [
+    {
+      "name": "organizationId", "type": "string", "required": true,
+      "label": { "de": "Organisations-ID", "en": "Organization ID" },
+      "help": { "de": "Aus der Adobe Developer Console, z.B. 1234567890@AdobeOrg.", "en": "From the Adobe Developer Console, e.g. 1234567890@AdobeOrg." }
+    },
+    {
+      "name": "clientId", "type": "string", "required": true,
+      "label": { "de": "Client-ID", "en": "Client ID" }
+    },
+    {
+      "name": "clientSecret", "type": "secret", "required": true,
+      "label": { "de": "Client-Secret", "en": "Client secret" }
+    },
+    {
+      "name": "tenantName", "type": "string", "required": true,
+      "label": { "de": "Mandantenname", "en": "Tenant name" },
+      "help": { "de": "Frei wählbarer Name, der nur in LOGINventory angezeigt wird.", "en": "Any name of your choice, shown only inside LOGINventory." }
+    }
+  ]
+}
+#>
 <#
 .SYNOPSIS
 A script to collect license information from Adobe products using the Adobe User Management API.

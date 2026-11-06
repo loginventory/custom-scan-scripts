@@ -1,0 +1,185 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/loginventory/custom-scan-agents/blob/main/tools/manifest.schema.json",
+  "title": "LOGINventory script manifest (LI-MANIFEST), schema version 1",
+  "description": "Describes a script of the script-based inventory. The JSON is embedded at the top of the script as the first <# LI-MANIFEST ... #> comment block. LOGINventory reads it to show title, description and parameters; the script itself runs unchanged.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "id", "version", "tier", "maintainer", "title", "summary", "category", "creates", "engine", "testRun", "parameters"],
+  "properties": {
+    "schema": {
+      "const": 1,
+      "description": "Version of the manifest format."
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "description": "Stable identifier of the script. Never changes, even if the title changes."
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Script version (SemVer). Raise it with every change of the script."
+    },
+    "tier": {
+      "enum": ["login", "partner", "community"],
+      "description": "Trust tier: login = developed and supported by LOGIN, partner = together with a partner who is responsible for the content, community = contributed by users, checked by LOGIN for malicious code only."
+    },
+    "maintainer": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Responsible person, team or company."
+    },
+    "partner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "description": "Required for tier 'partner': the partner who is responsible for the content.",
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "url": { "type": "string", "format": "uri" }
+      }
+    },
+    "title": {
+      "$ref": "#/definitions/localizedText",
+      "description": "Short name shown in the catalog."
+    },
+    "summary": {
+      "$ref": "#/definitions/localizedText",
+      "description": "One or two sentences: what the script reads and what it creates in LOGINventory."
+    },
+    "category": {
+      "enum": ["mdm", "identity", "cloud-licenses", "security", "import", "other"],
+      "description": "Filter in the catalog."
+    },
+    "creates": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "enum": ["Assets", "SoftwarePackages", "Subscriptions", "Licenses", "UserAccounts", "CustomProperties", "Vulnerabilities"] },
+      "description": "What the script creates in LOGINventory."
+    },
+    "engine": {
+      "enum": ["pwsh", "psc"],
+      "description": "pwsh = PowerShell 7 (pwsh.exe, default), psc = LOGINventory PowerShell (psc.exe, Windows PowerShell 5, shipped with the product). Set as parameter 'engine' of the definition."
+    },
+    "minLiVersion": {
+      "type": "string",
+      "pattern": "^9\\.\\d+$",
+      "description": "Lowest LOGINventory 9 version the script runs with. Omit if there is no known restriction."
+    },
+    "files": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/$" },
+      "description": "Sub folders with additional files that belong to the script and are installed with it, e.g. \"CyberInsight/\"."
+    },
+    "requires": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "modules": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 },
+          "description": "PowerShell modules that must be installed for the chosen engine. Empty if none."
+        },
+        "permissions": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Permissions or credentials to prepare on the vendor side, shown as a checklist."
+        }
+      }
+    },
+    "endpoints": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[A-Za-z0-9*][A-Za-z0-9*.-]*$" },
+      "description": "Hosts the script talks to, for firewall and proxy rules. Informational only."
+    },
+    "testRun": {
+      "type": "boolean",
+      "description": "true if the script can run without side effects (only reads data and writes .inv files)."
+    },
+    "docs": {
+      "$ref": "#/definitions/localizedUrl",
+      "description": "Link to the instructions for this script."
+    },
+    "parameters": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/parameter" },
+      "description": "Every parameter the script reads via $ctx.UserParameters, and nothing else."
+    },
+    "presets": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/preset" },
+      "description": "Optional ready-made definitions, e.g. one per action of the script."
+    }
+  },
+  "if": { "properties": { "tier": { "const": "partner" } } },
+  "then": { "required": ["partner"] },
+  "definitions": {
+    "localizedText": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["de", "en"],
+      "properties": {
+        "de": { "type": "string", "minLength": 1 },
+        "en": { "type": "string", "minLength": 1 }
+      }
+    },
+    "localizedUrl": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["de", "en"],
+      "properties": {
+        "de": { "type": "string", "format": "uri" },
+        "en": { "type": "string", "format": "uri" }
+      }
+    },
+    "parameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "label"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$",
+          "description": "Key as the script reads it from $ctx.UserParameters (case-insensitive)."
+        },
+        "type": {
+          "enum": ["string", "secret", "bool", "enum", "int", "path"],
+          "description": "secret = stored encrypted as password entity; path = file or folder on the computer running the Remote Scanner service."
+        },
+        "required": { "type": "boolean", "default": false },
+        "default": { "type": ["string", "boolean", "integer"] },
+        "options": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Allowed values, required for type 'enum'."
+        },
+        "label": { "$ref": "#/definitions/localizedText" },
+        "help": { "$ref": "#/definitions/localizedText" }
+      },
+      "if": { "properties": { "type": { "const": "enum" } } },
+      "then": { "required": ["options"] }
+    },
+    "preset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "parameters"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+        "name": { "$ref": "#/definitions/localizedText" },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": { "type": ["string", "boolean", "integer"] },
+          "description": "Parameter values of the preset, keys must be declared parameters."
+        }
+      }
+    }
+  }
+}

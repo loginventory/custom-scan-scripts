@@ -1,0 +1,62 @@
+name: Release catalog package
+
+# Started by hand with the catalog version. Builds scripts-catalog-<version>.zip from catalog/
+# and publishes it with catalog.json as a GitHub release "v<version>". The next CI runs use that
+# catalog.json as the baseline for the stable file name check.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Catalog version YYYY.MM.n, e.g. 2026.11.1"
+        required: true
+
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+
+      - name: Fetch catalog.json of the previous release (baseline for stable file names)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $false
+          New-Item -ItemType Directory -Force -Path baseline | Out-Null
+          gh release download --repo ${{ github.repository }} --pattern catalog.json --dir baseline 2>$null
+          # No release yet, or none with catalog.json: gh exits 1, which must not fail the step
+          $global:LASTEXITCODE = 0
+          if (Test-Path baseline/catalog.json) {
+            "BASELINE_CATALOG=baseline/catalog.json" | Out-File -FilePath $env:GITHUB_ENV -Append
+          } else {
+            Write-Host "no previous release with catalog.json"
+          }
+
+      - name: Check catalog
+        shell: pwsh
+        run: ./tools/Test-Catalog.ps1 -BaselineCatalogPath $env:BASELINE_CATALOG
+
+      - name: README table up to date
+        shell: pwsh
+        run: ./tools/Update-Readme.ps1 -Check
+
+      - name: Build package
+        shell: pwsh
+        run: ./tools/New-CatalogPackage.ps1 -CatalogVersion ${{ github.event.inputs.version }} -OutputDir build
+
+      - name: Create GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = '${{ github.event.inputs.version }}'
+          gh release create "v$version" "build/scripts-catalog-$version.zip" "build/catalog.json" `
+            --repo ${{ github.repository }} `
+            --title "Skript-Katalog $version" `
+            --notes "Katalog-Paket $version: Inhalt von catalog/ mit catalog.json und catalog.cat (SHA-256-Hashliste, noch nicht signiert). Der Remote Scanner von LOGINventory 9 lädt das Paket beim Öffnen des Skript-Katalogs selbst; ohne Internetzugang des Dienstes lässt sich die Zip dort über „…" aus einer Datei importieren."

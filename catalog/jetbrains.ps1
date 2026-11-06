@@ -1,3 +1,40 @@
+<# LI-MANIFEST
+{
+  "schema": 1,
+  "id": "jetbrains-licenses",
+  "version": "2.0.0",
+  "tier": "login",
+  "maintainer": "Schmidt's LOGIN GmbH",
+  "title": { "de": "JetBrains Lizenzen", "en": "JetBrains licenses" },
+  "summary": {
+    "de": "Liest Produktlizenzen über die JetBrains Account API und legt sie als Cloud-Subscriptions und Lizenzen an.",
+    "en": "Reads product licenses via the JetBrains Account API and creates them as cloud subscriptions and licenses."
+  },
+  "category": "cloud-licenses",
+  "creates": ["Subscriptions", "Licenses"],
+  "engine": "pwsh",
+  "requires": {
+    "modules": [],
+    "permissions": ["JetBrains Account: API key and customer code"]
+  },
+  "endpoints": ["account.jetbrains.com"],
+  "testRun": true,
+  "docs": {
+    "de": "https://github.com/loginventory/custom-scan-agents/blob/main/catalog/jetbrains.ps1",
+    "en": "https://github.com/loginventory/custom-scan-agents/blob/main/catalog/jetbrains.ps1"
+  },
+  "parameters": [
+    {
+      "name": "apiKey", "type": "secret", "required": true,
+      "label": { "de": "API-Key", "en": "API key" }
+    },
+    {
+      "name": "customerCode", "type": "string", "required": true,
+      "label": { "de": "Kundennummer (customer code)", "en": "Customer code" }
+    }
+  ]
+}
+#>
 <#
 .SYNOPSIS
 Ein Skript zur Erhebung von JetBrains Produktlizenzinformationen über die JetBrains Account API.

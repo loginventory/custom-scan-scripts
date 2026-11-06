@@ -1,3 +1,40 @@
+<# LI-MANIFEST
+{
+  "schema": 1,
+  "id": "baramundi-mobile-devices",
+  "version": "1.0.0",
+  "tier": "login",
+  "maintainer": "Schmidt's LOGIN GmbH",
+  "title": { "de": "baramundi: mobile Geräte", "en": "baramundi mobile devices" },
+  "summary": {
+    "de": "Liest Smartphones und Tablets über die bConnect-API von baramundi und legt sie als Assets an.",
+    "en": "Reads smartphones and tablets via the baramundi bConnect API and creates them as assets."
+  },
+  "category": "mdm",
+  "creates": ["Assets"],
+  "engine": "pwsh",
+  "requires": {
+    "modules": [],
+    "permissions": ["baramundi bConnect: API key"]
+  },
+  "testRun": true,
+  "docs": {
+    "de": "https://github.com/loginventory/custom-scan-agents/blob/main/catalog/baramundi-MobileDevices.ps1",
+    "en": "https://github.com/loginventory/custom-scan-agents/blob/main/catalog/baramundi-MobileDevices.ps1"
+  },
+  "parameters": [
+    {
+      "name": "apiUrl", "type": "string", "required": true,
+      "label": { "de": "bConnect-URL", "en": "bConnect URL" },
+      "help": { "de": "z.B. https://SERVERNAME/bconnect/endpoints", "en": "e.g. https://SERVERNAME/bconnect/endpoints" }
+    },
+    {
+      "name": "apiKey", "type": "secret", "required": true,
+      "label": { "de": "API-Key", "en": "API key" }
+    }
+  ]
+}
+#>
 <#
 .SYNOPSIS
 Ein Skript zur Erfassung von Smartphones und Tablets in baramundi.

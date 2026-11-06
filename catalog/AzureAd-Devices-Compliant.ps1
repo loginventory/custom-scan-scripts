@@ -1,4 +1,61 @@
-﻿<#
+﻿<# LI-MANIFEST
+{
+  "schema": 1,
+  "id": "azuread-devices-compliant",
+  "version": "2.0.0",
+  "tier": "login",
+  "maintainer": "Schmidt's LOGIN GmbH",
+  "title": { "de": "Microsoft Entra ID Geräte mit Compliance-Status", "en": "Microsoft Entra ID devices with compliance state" },
+  "summary": {
+    "de": "Liest Geräte aus Microsoft Entra ID (Azure AD) über Microsoft Graph, legt sie als Assets an und speichert den Compliance-Status als Eigene Eigenschaft.",
+    "en": "Reads devices from Microsoft Entra ID (Azure AD) via Microsoft Graph, creates them as assets and stores the compliance state as a custom property."
+  },
+  "category": "identity",
+  "creates": ["Assets", "CustomProperties"],
+  "engine": "pwsh",
+  "requires": {
+    "modules": [],
+    "permissions": [
+      "Microsoft Graph: Device.Read.All (Application)",
+      "Microsoft Graph: User.Read.All (Application, optional: user principal name of registered users)"
+    ]
+  },
+  "endpoints": ["login.microsoftonline.com", "graph.microsoft.com"],
+  "testRun": true,
+  "docs": {
+    "de": "https://github.com/loginventory/custom-scan-agents/blob/main/step-by-step-example.md",
+    "en": "https://github.com/loginventory/custom-scan-agents/blob/main/catalog/AzureAd-Devices-Compliant.ps1"
+  },
+  "parameters": [
+    {
+      "name": "tenantId", "type": "string", "required": true,
+      "label": { "de": "Tenant-ID", "en": "Tenant ID" }
+    },
+    {
+      "name": "clientId", "type": "string", "required": true,
+      "label": { "de": "Client-ID der App-Registrierung", "en": "App registration client ID" }
+    },
+    {
+      "name": "clientSecret", "type": "secret", "required": true,
+      "label": { "de": "Client-Secret", "en": "Client secret" }
+    },
+    {
+      "name": "nameFilter", "type": "string",
+      "label": { "de": "Namensfilter", "en": "Name filter" },
+      "help": { "de": "Wildcard-Filter auf den Gerätenamen, z.B. LT-*. Leer = alle Geräte.", "en": "Wildcard filter on the device name, e.g. LT-*. Empty = all devices." }
+    },
+    {
+      "name": "enabledAccountsOnly", "type": "bool", "default": false,
+      "label": { "de": "Nur aktivierte Geräte", "en": "Enabled devices only" }
+    },
+    {
+      "name": "validCompliantStatesOnly", "type": "bool", "default": false,
+      "label": { "de": "Nur Geräte mit gültigem Compliance-Status", "en": "Devices with a valid compliance state only" }
+    }
+  ]
+}
+#>
+<#
 .SYNOPSIS
 Ein Skript zur Erfassung von Azure AD Geräteinformationen über Microsoft Graph.
 
