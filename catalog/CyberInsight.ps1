@@ -1,3 +1,42 @@
+<# LI-MANIFEST
+{
+  "schema": 1,
+  "id": "cyberinsight",
+  "version": "1.0.0",
+  "tier": "login",
+  "maintainer": "Schmidt's LOGIN GmbH",
+  "title": { "de": "Cyber Insight Schwachstellenanalyse", "en": "Cyber Insight vulnerability assessment" },
+  "summary": {
+    "de": "Überträgt Inventardaten an Cyber Insight (Action=Post) und holt die erkannten Schwachstellen je Software-Paket ab (Action=Get). API-Key und Firmenname werden in LOGINventory.config hinterlegt, siehe Handbuch.",
+    "en": "Uploads inventory data to Cyber Insight (Action=Post) and downloads the detected vulnerabilities per software package (Action=Get). API key and company name are configured in LOGINventory.config, see the manual."
+  },
+  "category": "security",
+  "creates": ["Vulnerabilities"],
+  "engine": "psc",
+  "files": ["CyberInsight/"],
+  "requires": {
+    "modules": [],
+    "permissions": ["Cyber Insight: API key (access token) of your account, stored as CyberInsightApiKey in LOGINventory.config"]
+  },
+  "endpoints": ["ci-gateway-5j2lrwe9.nw.gateway.dev"],
+  "testRun": false,
+  "docs": {
+    "de": "https://www.loginventory.info/documentation/9/de/schwachstellen/",
+    "en": "https://www.loginventory.info/documentation/9/en/vulnerabilities/"
+  },
+  "parameters": [
+    {
+      "name": "Action", "type": "enum", "required": true, "options": ["Post", "Get"],
+      "label": { "de": "Aktion", "en": "Action" },
+      "help": { "de": "Post: Inventardaten zu Cyber Insight hochladen. Get: Schwachstellen abrufen. Für beide Aktionen je eine Definition anlegen.", "en": "Post: upload inventory data to Cyber Insight. Get: download vulnerabilities. Create one definition per action." }
+    }
+  ],
+  "presets": [
+    { "id": "post", "name": { "de": "Cyber Insight Upload", "en": "Cyber Insight upload" }, "parameters": { "Action": "Post" } },
+    { "id": "get", "name": { "de": "Cyber Insight Abruf", "en": "Cyber Insight download" }, "parameters": { "Action": "Get" } }
+  ]
+}
+#>
 <#
 .SYNOPSIS
     Entry point to fetch data from CyberInsight and write .inv files

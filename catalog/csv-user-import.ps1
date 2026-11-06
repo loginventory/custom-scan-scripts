@@ -1,4 +1,37 @@
-﻿<#
+﻿<# LI-MANIFEST
+{
+  "schema": 1,
+  "id": "csv-user-import",
+  "version": "1.0.0",
+  "tier": "login",
+  "maintainer": "Schmidt's LOGIN GmbH",
+  "title": { "de": "Benutzer aus CSV-Datei", "en": "Users from CSV file" },
+  "summary": {
+    "de": "Liest Benutzer aus einer CSV-Datei (Trennzeichen Semikolon, Spaltennamen wie in der Tabelle UserAccount) und legt sie als Benutzerkonten an. Pflichtspalten: Name und ObjectSID.",
+    "en": "Reads users from a CSV file (semicolon separated, column names as in the UserAccount table) and creates them as user accounts. Required columns: Name and ObjectSID."
+  },
+  "category": "import",
+  "creates": ["UserAccounts"],
+  "engine": "pwsh",
+  "requires": {
+    "modules": [],
+    "permissions": []
+  },
+  "testRun": true,
+  "docs": {
+    "de": "https://github.com/loginventory/custom-scan-agents/blob/main/catalog/csv-user-import.ps1",
+    "en": "https://github.com/loginventory/custom-scan-agents/blob/main/catalog/csv-user-import.ps1"
+  },
+  "parameters": [
+    {
+      "name": "pathCSV", "type": "path", "required": true,
+      "label": { "de": "CSV-Datei", "en": "CSV file" },
+      "help": { "de": "Pfad auf dem Rechner des Remote-Scanner-Dienstes ohne Anführungszeichen, z.B. C:\\temp\\users.csv", "en": "Path on the computer running the Remote Scanner service, without quotation marks, e.g. C:\\temp\\users.csv" }
+    }
+  ]
+}
+#>
+<#
 .SYNOPSIS
 Ein Skript zum Einlesen von Informationen zu Benutzern aus CSV-Dateien.
 

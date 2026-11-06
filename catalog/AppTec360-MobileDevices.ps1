@@ -1,3 +1,45 @@
+<# LI-MANIFEST
+{
+  "schema": 1,
+  "id": "apptec360-mobile-devices",
+  "version": "1.0.0",
+  "tier": "login",
+  "maintainer": "Schmidt's LOGIN GmbH",
+  "title": { "de": "AppTec360 EMM: mobile Geräte", "en": "AppTec360 EMM mobile devices" },
+  "summary": {
+    "de": "Liest Smartphones und Tablets über die REST-API von AppTec360 EMM und legt sie als Assets an.",
+    "en": "Reads smartphones and tablets via the AppTec360 EMM REST API and creates them as assets."
+  },
+  "category": "mdm",
+  "creates": ["Assets"],
+  "engine": "pwsh",
+  "requires": {
+    "modules": [],
+    "permissions": ["AppTec360 EMM: API key and private key file, see the AppTec REST API guide"]
+  },
+  "testRun": true,
+  "docs": {
+    "de": "https://github.com/loginventory/custom-scan-agents/blob/main/catalog/AppTec360-MobileDevices.ps1",
+    "en": "https://github.com/loginventory/custom-scan-agents/blob/main/catalog/AppTec360-MobileDevices.ps1"
+  },
+  "parameters": [
+    {
+      "name": "apiUrl", "type": "string", "required": true,
+      "label": { "de": "API-URL", "en": "API URL" },
+      "help": { "de": "z.B. https://your-apptec-url/public/external/api", "en": "e.g. https://your-apptec-url/public/external/api" }
+    },
+    {
+      "name": "apiKey", "type": "secret", "required": true,
+      "label": { "de": "API-Key", "en": "API key" }
+    },
+    {
+      "name": "privateKeyPath", "type": "path", "required": true,
+      "label": { "de": "Pfad zum privaten Schlüssel", "en": "Private key path" },
+      "help": { "de": "PEM-Datei auf dem Rechner des Remote-Scanner-Dienstes, z.B. C:\\ProgramData\\LOGIN\\PrivateKey.pem", "en": "PEM file on the computer running the Remote Scanner service, e.g. C:\\ProgramData\\LOGIN\\PrivateKey.pem" }
+    }
+  ]
+}
+#>
 <#
 .SYNOPSIS
 Ein Skript zur Erfassung von Smartphones und Tablets in AppTec360 EMM.

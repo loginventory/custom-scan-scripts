@@ -1,3 +1,51 @@
+<# LI-MANIFEST
+{
+  "schema": 1,
+  "id": "intune-devices",
+  "version": "3.0.0",
+  "tier": "login",
+  "maintainer": "Schmidt's LOGIN GmbH",
+  "title": { "de": "Microsoft Intune Geräte", "en": "Microsoft Intune devices" },
+  "summary": {
+    "de": "Liest in Intune verwaltete Geräte über Microsoft Graph und legt sie als Assets an, wahlweise nur mobile Geräte.",
+    "en": "Reads devices managed by Intune via Microsoft Graph and creates them as assets, optionally mobile devices only."
+  },
+  "category": "mdm",
+  "creates": ["Assets"],
+  "engine": "pwsh",
+  "requires": {
+    "modules": [],
+    "permissions": [
+      "Microsoft Graph: DeviceManagementManagedDevices.Read.All (Application)",
+      "Microsoft Graph: User.Read.All (Application, optional: device owner)"
+    ]
+  },
+  "endpoints": ["login.microsoftonline.com", "graph.microsoft.com"],
+  "testRun": true,
+  "docs": {
+    "de": "https://github.com/loginventory/custom-scan-agents/blob/main/catalog/IntuneDevices.ps1",
+    "en": "https://github.com/loginventory/custom-scan-agents/blob/main/catalog/IntuneDevices.ps1"
+  },
+  "parameters": [
+    {
+      "name": "tenantId", "type": "string", "required": true,
+      "label": { "de": "Tenant-ID", "en": "Tenant ID" }
+    },
+    {
+      "name": "clientId", "type": "string", "required": true,
+      "label": { "de": "Client-ID der App-Registrierung", "en": "App registration client ID" }
+    },
+    {
+      "name": "clientSecret", "type": "secret", "required": true,
+      "label": { "de": "Client-Secret", "en": "Client secret" }
+    },
+    {
+      "name": "scanOnlyMobileDevices", "type": "bool", "default": false,
+      "label": { "de": "Nur mobile Geräte (iOS, Android)", "en": "Mobile devices only (iOS, Android)" }
+    }
+  ]
+}
+#>
 <#
 .SYNOPSIS
 Ein Skript zur Erfassung von Microsoft Intune Geräteinformationen über Microsoft Graph.
