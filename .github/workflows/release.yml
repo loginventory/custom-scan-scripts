@@ -61,7 +61,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $version = '${{ github.event.inputs.version }}'
+          # Notes go through a file: the quotation marks in the text would end a command line string
+          $notes = @"
+          Katalog-Paket ${version}: Inhalt von catalog/ mit catalog.json und catalog.cat (SHA-256-Hashliste, noch nicht signiert).
+
+          Der Remote Scanner von LOGINventory 9 lädt das Paket beim Öffnen des Skript-Katalogs selbst. Ohne Internetzugang des Dienstes lässt sich die Zip dort über die Schaltfläche „…" aus einer Datei importieren.
+          "@
+          Set-Content -Path build/release-notes.md -Value $notes -Encoding utf8
           gh release create "v$version" "build/scripts-catalog-$version.zip" "build/catalog.json" `
             --repo ${{ github.repository }} `
             --title "Skript-Katalog $version" `
-            --notes "Katalog-Paket ${version}: Inhalt von catalog/ mit catalog.json und catalog.cat (SHA-256-Hashliste, noch nicht signiert). Der Remote Scanner von LOGINventory 9 lädt das Paket beim Öffnen des Skript-Katalogs selbst; ohne Internetzugang des Dienstes lässt sich die Zip dort über „…" aus einer Datei importieren."
+            --notes-file build/release-notes.md
