@@ -23,8 +23,8 @@
   "endpoints": ["login.microsoftonline.com", "graph.microsoft.com"],
   "testRun": true,
   "docs": {
-    "de": "https://github.com/loginventory/custom-scan-agents/blob/main/catalog/IntuneDevices.ps1",
-    "en": "https://github.com/loginventory/custom-scan-agents/blob/main/catalog/IntuneDevices.ps1"
+    "de": "https://github.com/loginventory/custom-scan-scripts/blob/main/catalog/IntuneDevices.ps1",
+    "en": "https://github.com/loginventory/custom-scan-scripts/blob/main/catalog/IntuneDevices.ps1"
   },
   "parameters": [
     {

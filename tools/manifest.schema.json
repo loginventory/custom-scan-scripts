@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/loginventory/custom-scan-agents/blob/main/tools/manifest.schema.json",
+  "$id": "https://github.com/loginventory/custom-scan-scripts/blob/main/tools/manifest.schema.json",
   "title": "LOGINventory script manifest (LI-MANIFEST), schema version 1",
   "description": "Describes a script of the script-based inventory. The JSON is embedded at the top of the script as the first <# LI-MANIFEST ... #> comment block. LOGINventory reads it to show title, description and parameters; the script itself runs unchanged.",
   "type": "object",
