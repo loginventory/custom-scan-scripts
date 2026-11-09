@@ -63,7 +63,7 @@ oder in
 
 befinden. Aktuell werden nur Powershell-Skripte mit der Erweiterung .ps1 unterstützt. Bei gleichem Dateinamen hat `INSTALLDIR\Resources\Agents` Vorrang. Empfohlen ist der Ordner unter `%programdata%`, weil ihn das Setup bei Updates nicht anfasst.
 
-**Skripte herunterladen:** Laden Sie das Repository als Zip herunter ([main.zip](https://github.com/loginventory/custom-scan-agents/archive/refs/heads/main.zip)) und entpacken Sie es. Kopieren Sie aus dem Ordner `catalog` die Skripte, die Sie verwenden möchten, zusammen mit dem Ordner `include` (und bei CyberInsight dem Ordner `CyberInsight`) in eines der beiden Verzeichnisse. Sie können auch den kompletten Inhalt von `catalog` kopieren, der Aufbau ist derselbe. Eigene Skripte legen Sie daneben ab.
+**Skripte herunterladen:** Laden Sie das Repository als Zip herunter ([main.zip](https://github.com/loginventory/custom-scan-scripts/archive/refs/heads/main.zip)) und entpacken Sie es. Kopieren Sie aus dem Ordner `catalog` die Skripte, die Sie verwenden möchten, zusammen mit dem Ordner `include` (und bei CyberInsight dem Ordner `CyberInsight`) in eines der beiden Verzeichnisse. Sie können auch den kompletten Inhalt von `catalog` kopieren, der Aufbau ist derselbe. Eigene Skripte legen Sie daneben ab.
 
 **Der Ordner `include` mit [`common.ps1`](catalog/include/common.ps1) und [`WebRequest.ps1`](catalog/include/WebRequest.ps1) muss immer vorhanden sein.** Bringen Sie ihn bei jedem Update eines Skripts mit auf den neuesten Stand: Die Skripte eines Katalog-Stands passen zum `include` desselben Stands.
 

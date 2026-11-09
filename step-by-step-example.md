@@ -11,7 +11,7 @@ Sollte ein hier erwähntes Verzeichnis lokal noch nicht existieren, erstellen Si
 
 1. Laden Sie die für Ihr System passende Powershell Core Version von [PowerShell GitHub](https://github.com/PowerShell/PowerShell) herunter und installieren Sie diese. **Wichtig:** Die in Windows enthaltene Powershell Version (5.x) ist nicht ausreichend.
 2. Starten Sie das System neu.
-3. Besuchen Sie das [LOGINventory custom-scan-agents GitHub Repository](https://github.com/loginventory/custom-scan-agents).
+3. Besuchen Sie das [LOGINventory custom-scan-scripts GitHub Repository](https://github.com/loginventory/custom-scan-scripts).
 4. Laden Sie die Dateien common.ps1 und WebRequest.ps1 aus dem Ordner `catalog/include` des Repositorys herunter und kopieren Sie diese nach `INSTALLDIR\Resources\Agents\include`.
    
 

@@ -19,8 +19,8 @@
   },
   "testRun": true,
   "docs": {
-    "de": "https://github.com/loginventory/custom-scan-agents/blob/main/catalog/csv-user-import.ps1",
-    "en": "https://github.com/loginventory/custom-scan-agents/blob/main/catalog/csv-user-import.ps1"
+    "de": "https://github.com/loginventory/custom-scan-scripts/blob/main/catalog/csv-user-import.ps1",
+    "en": "https://github.com/loginventory/custom-scan-scripts/blob/main/catalog/csv-user-import.ps1"
   },
   "parameters": [
     {

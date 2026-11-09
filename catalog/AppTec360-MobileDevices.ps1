@@ -19,8 +19,8 @@
   },
   "testRun": true,
   "docs": {
-    "de": "https://github.com/loginventory/custom-scan-agents/blob/main/catalog/AppTec360-MobileDevices.ps1",
-    "en": "https://github.com/loginventory/custom-scan-agents/blob/main/catalog/AppTec360-MobileDevices.ps1"
+    "de": "https://github.com/loginventory/custom-scan-scripts/blob/main/catalog/AppTec360-MobileDevices.ps1",
+    "en": "https://github.com/loginventory/custom-scan-scripts/blob/main/catalog/AppTec360-MobileDevices.ps1"
   },
   "parameters": [
     {

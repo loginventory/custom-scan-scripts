@@ -20,8 +20,8 @@
   "endpoints": ["account.jetbrains.com"],
   "testRun": true,
   "docs": {
-    "de": "https://github.com/loginventory/custom-scan-agents/blob/main/catalog/jetbrains.ps1",
-    "en": "https://github.com/loginventory/custom-scan-agents/blob/main/catalog/jetbrains.ps1"
+    "de": "https://github.com/loginventory/custom-scan-scripts/blob/main/catalog/jetbrains.ps1",
+    "en": "https://github.com/loginventory/custom-scan-scripts/blob/main/catalog/jetbrains.ps1"
   },
   "parameters": [
     {
