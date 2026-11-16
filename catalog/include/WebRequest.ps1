@@ -136,6 +136,9 @@ function Invoke-LoginWebRequest {
         RequestBodyLength (length of the body actually sent) and RequestEncoding ('gzip' or '').
     #>
     [CmdletBinding()]
+    # The proxy password arrives as plain text from LOGINventory.config (decrypted by common.ps1); it has to be
+    # wrapped into a SecureString to build the NetworkCredential, there is no encrypted source to read it from.
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingConvertToSecureStringWithPlainText', '', Justification = 'Proxy password comes from LOGINventory.config, not from a literal')]
     param(
         [Parameter(Mandatory=$true)][ValidateSet('GET','POST','PUT','PATCH','DELETE')] [string]$Method,
         [Parameter(Mandatory=$true)][string]$Uri,

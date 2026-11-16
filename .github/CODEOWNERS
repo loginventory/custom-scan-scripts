@@ -1,0 +1,15 @@
+# Code owners are requested for review automatically. The last matching rule wins.
+# tools/Test-Catalog.ps1 compares these rules with the "tier" in each script manifest:
+#   login, community  exactly the LOGIN owners of the /catalog/ rule
+#   partner           the LOGIN owners plus the partner's GitHub account(s)
+
+*                           @daschmidl @dermaier089 @SimLowSpec
+
+# Catalog: default for every script, include/ and retired.json. Today every published script
+# is tier "login", LOGIN publishes them even when the integration comes from a partner.
+/catalog/                   @daschmidl @dermaier089 @SimLowSpec
+
+# Tier "partner" (once a partner maintains a script itself): add the partner account after the
+# LOGIN owners, for the script and its folder, e.g.
+# /catalog/Example.ps1        @daschmidl @dermaier089 @SimLowSpec @partner-account
+# /catalog/Example/           @daschmidl @dermaier089 @SimLowSpec @partner-account

@@ -1,3 +1,64 @@
+<# LI-MANIFEST
+{
+  "schema": 1,
+  "id": "fortimanager-devices",
+  "version": "1.0.0",
+  "tier": "login",
+  "maintainer": "Schmidt's LOGIN GmbH",
+  "title": { "de": "FortiManager: FortiGates, FortiSwitches und FortiAPs", "en": "FortiManager: FortiGates, FortiSwitches and FortiAPs" },
+  "summary": {
+    "de": "Liest über die JSON-RPC API eines FortiManagers die verwalteten FortiGates (bei HA-Clustern jedes Mitglied) sowie die per FortiLink angebundenen FortiSwitches und FortiAPs und legt sie als Assets an. Für FortiSwitches werden zusätzlich Ports, VLANs und die MAC-Adresstabelle erfasst.",
+    "en": "Reads the FortiGates managed by a FortiManager (each member of an HA cluster) and the FortiSwitches and FortiAPs connected via FortiLink through its JSON-RPC API and creates them as assets. For FortiSwitches, ports, VLANs and the MAC address table are collected as well."
+  },
+  "category": "other",
+  "creates": ["Assets", "CustomProperties"],
+  "engine": "pwsh",
+  "requires": {
+    "modules": [],
+    "permissions": ["FortiManager: REST API administrator with API key (rpc-permit read) and read access to the Device Manager of the ADOMs, or an administrator with JSON API access Read"]
+  },
+  "testRun": true,
+  "docs": {
+    "de": "https://github.com/loginventory/custom-scan-scripts/blob/main/catalog/FortiManager-Devices.ps1",
+    "en": "https://github.com/loginventory/custom-scan-scripts/blob/main/catalog/FortiManager-Devices.ps1"
+  },
+  "parameters": [
+    { "name": "fmgHost", "type": "string", "required": true,
+      "label": { "de": "FortiManager (Host oder URL)", "en": "FortiManager (host or URL)" } },
+    { "name": "apiKey", "type": "secret",
+      "label": { "de": "API-Key", "en": "API key" },
+      "help": { "de": "Empfohlen. Alternativ Benutzername und Passwort.", "en": "Recommended. Alternatively user name and password." } },
+    { "name": "username", "type": "string", "label": { "de": "Benutzername", "en": "User name" } },
+    { "name": "password", "type": "secret", "label": { "de": "Passwort", "en": "Password" } },
+    { "name": "adoms", "type": "string",
+      "label": { "de": "Nur diese ADOMs (durch Komma getrennt)", "en": "Only these ADOMs (comma separated)" } },
+    { "name": "nameFilter", "type": "string",
+      "label": { "de": "Namensfilter FortiGates, z.B. FGT-MUC*", "en": "FortiGate name filter, e.g. FGT-MUC*" } },
+    { "name": "includeSwitches", "type": "bool", "default": true, "label": { "de": "FortiSwitches erfassen", "en": "Collect FortiSwitches" } },
+    { "name": "includeAccessPoints", "type": "bool", "default": true, "label": { "de": "FortiAPs erfassen", "en": "Collect FortiAPs" } },
+    { "name": "includeSwitchPorts", "type": "bool", "default": true, "label": { "de": "Ports und VLANs der FortiSwitches", "en": "FortiSwitch ports and VLANs" } },
+    { "name": "includeMacTable", "type": "bool", "default": true, "label": { "de": "MAC-Adresstabelle der FortiSwitches", "en": "FortiSwitch MAC address table" } },
+    { "name": "componentSource", "type": "enum", "options": ["proxy", "fmg"], "default": "proxy",
+      "label": { "de": "Quelle für Switches und APs", "en": "Source of switches and APs" },
+      "help": { "de": "proxy = Live-Abfrage der FortiGates über den FortiManager, fmg = Statusdaten des FortiManagers (ohne Ports, VLANs, MAC-Tabelle)", "en": "proxy = live query of the FortiGates through the FortiManager, fmg = FortiManager status data (no ports, VLANs, MAC table)" } },
+    { "name": "siteMetaField", "type": "string",
+      "label": { "de": "Meta-Feld mit dem Standort", "en": "Meta field holding the site" } },
+    { "name": "exportMetaFields", "type": "bool", "default": false,
+      "label": { "de": "Alle Meta-Felder als Eigene Eigenschaften", "en": "All meta fields as custom properties" } },
+    { "name": "skipCertificateCheck", "type": "bool", "default": false,
+      "label": { "de": "Zertifikatsprüfung abschalten", "en": "Skip certificate check" } },
+    { "name": "useWebProxy", "type": "bool", "default": false,
+      "label": { "de": "Web-Proxy von LOGINventory verwenden", "en": "Use the LOGINventory web proxy" } },
+    { "name": "proxyTimeout", "type": "int", "default": 60,
+      "label": { "de": "Zeitlimit je FortiGate (Sekunden)", "en": "Timeout per FortiGate (seconds)" } },
+    { "name": "useSerialAsCustomId", "type": "bool", "default": false,
+      "label": { "de": "Seriennummer als CustomId", "en": "Serial number as CustomId" },
+      "help": { "de": "Wiedererkennung nur über die Seriennummer. Vor dem ersten Import festlegen.", "en": "Match by serial number only. Decide before the first import." } },
+    { "name": "rawDumpDir", "type": "path",
+      "label": { "de": "Ordner für Rohdaten der API (Analyse)", "en": "Folder for raw API data (analysis)" } }
+  ]
+}
+#>
 <#
 .SYNOPSIS
 Ein Skript zur Erfassung von FortiGate Firewalls, FortiSwitches und FortiAP Access Points über die FortiManager JSON-RPC API.
@@ -26,7 +87,7 @@ Die gesammelten Informationen werden zur Weiterverarbeitung durch den Data Servi
 Schmidt's LOGIN GmbH
 
 .VERSION
-0.9.0 (Entwurf)
+1.0.0
 
 .LICENSE
 Dieses Skript ist unter der MIT-Lizenz lizenziert. Vollständige Lizenzinformationen finden Sie unter [https://opensource.org/licenses/MIT](https://opensource.org/licenses/MIT)
@@ -100,26 +161,32 @@ $ctx = New-CommonContext -Parameters $parameter -StartLabel 'FortiManager'
 
 # ------------ CONFIGURATION -----------------
 
-$p = $ctx.UserParameters
+# Each parameter is read directly from the context (no alias variable), so tools/Test-Catalog.ps1 can match it with the manifest.
+function Get-BoolParameter([object]$Value, [bool]$Default) {
+    if (HasValue $Value) { return (ConvertTo-Bool $Value) }
+    return $Default
+}
 
-$fmgHost             = [string]$p['fmgHost']
-$apiKey              = [string]$p['apiKey']
-$username            = [string]$p['username']
-$password            = [string]$p['password']
-$adomFilter          = @(([string]$p['adoms']) -split '[,|]' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-$nameFilter          = [string]$p['nameFilter']
-$includeSwitches     = if (HasValue $p['includeSwitches'])     { ConvertTo-Bool $p['includeSwitches'] }     else { $true }
-$includeAccessPoints = if (HasValue $p['includeAccessPoints']) { ConvertTo-Bool $p['includeAccessPoints'] } else { $true }
-$componentSource     = if (HasValue $p['componentSource'])     { ([string]$p['componentSource']).Trim().ToLowerInvariant() } else { 'proxy' }
-$siteMetaField       = [string]$p['siteMetaField']
-$exportMetaFields    = ConvertTo-Bool $p['exportMetaFields']
-$skipCertCheck       = ConvertTo-Bool $p['skipCertificateCheck']
-$useWebProxy         = ConvertTo-Bool $p['useWebProxy']
-$proxyTimeout        = if (HasValue $p['proxyTimeout']) { [int]$p['proxyTimeout'] } else { 60 }
-$rawDumpDir          = [string]$p['rawDumpDir']
-$useSerialAsCustomId = ConvertTo-Bool $p['useSerialAsCustomId']
-$includeSwitchPorts  = if (HasValue $p['includeSwitchPorts']) { ConvertTo-Bool $p['includeSwitchPorts'] } else { $true }
-$includeMacTable     = if (HasValue $p['includeMacTable'])    { ConvertTo-Bool $p['includeMacTable'] }    else { $true }
+$fmgHost             = [string]$ctx.UserParameters['fmgHost']
+$apiKey              = [string]$ctx.UserParameters['apiKey']
+$username            = [string]$ctx.UserParameters['username']
+$password            = [string]$ctx.UserParameters['password']
+$adomFilter          = @(([string]$ctx.UserParameters['adoms']) -split '[,|]' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+$nameFilter          = [string]$ctx.UserParameters['nameFilter']
+$includeSwitches     = Get-BoolParameter $ctx.UserParameters['includeSwitches'] $true
+$includeAccessPoints = Get-BoolParameter $ctx.UserParameters['includeAccessPoints'] $true
+$componentSource     = ([string]$ctx.UserParameters['componentSource']).Trim().ToLowerInvariant()
+if (-not $componentSource) { $componentSource = 'proxy' }
+$siteMetaField       = [string]$ctx.UserParameters['siteMetaField']
+$exportMetaFields    = Get-BoolParameter $ctx.UserParameters['exportMetaFields'] $false
+$skipCertCheck       = Get-BoolParameter $ctx.UserParameters['skipCertificateCheck'] $false
+$useWebProxy         = Get-BoolParameter $ctx.UserParameters['useWebProxy'] $false
+$proxyTimeoutValue   = $ctx.UserParameters['proxyTimeout']
+$proxyTimeout        = if (HasValue $proxyTimeoutValue) { [int]$proxyTimeoutValue } else { 60 }
+$rawDumpDir          = [string]$ctx.UserParameters['rawDumpDir']
+$useSerialAsCustomId = Get-BoolParameter $ctx.UserParameters['useSerialAsCustomId'] $false
+$includeSwitchPorts  = Get-BoolParameter $ctx.UserParameters['includeSwitchPorts'] $true
+$includeMacTable     = Get-BoolParameter $ctx.UserParameters['includeMacTable'] $true
 
 # The Job Monitor reads one event per line: keep every message on a single line
 # (FortiManager error texts end with a line break).

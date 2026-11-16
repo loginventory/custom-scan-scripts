@@ -12,3 +12,7 @@ data/token.json
 
 # Generated inventory files
 *.inv
+
+# Output of tools/New-CatalogIndex.ps1 and the CI baseline download
+build/
+baseline/
