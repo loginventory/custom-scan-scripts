@@ -1,14 +1,16 @@
 name: Release catalog package
 
-# Started by hand with the catalog version. Builds scripts-catalog-<version>.zip from catalog/
-# and publishes it with catalog.json as a GitHub release "v<version>". The next CI runs use that
-# catalog.json as the baseline for the stable file name check.
+# Started by hand. Builds scripts-catalog-<version>.zip from catalog/ and publishes it with
+# catalog.json as a GitHub release "v<version>". The version follows YYYY.MM.n; left empty, the
+# workflow takes the next free number of the current month from the existing release tags. The
+# release notes list the catalog files changed since the previous release. The next CI runs use
+# the release's catalog.json as the baseline for the stable file name check.
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Catalog version YYYY.MM.n, e.g. 2026.11.1"
-        required: true
+        description: "Catalog version YYYY.MM.n, e.g. 2026.11.1. Leave empty for the next free number of the current month."
+        required: false
 
 jobs:
   release:
@@ -17,6 +19,32 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history including tags: the version step reads the release tags, the release
+          # notes diff catalog/ against the previous release
+          fetch-depth: 0
+
+      - name: Determine catalog version
+        id: version
+        shell: pwsh
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          $version = "$env:INPUT_VERSION".Trim()
+          if ($version) {
+            if ($version -notmatch '^\d{4}\.(0[1-9]|1[0-2])\.\d+(-[a-z]+)?$') { throw "Version '$version' does not match YYYY.MM.n" }
+            if (git tag -l "v$version") { throw "Release v$version exists already" }
+          } else {
+            # Next free number of the current month: highest existing v<YYYY.MM>.<n> tag plus one
+            $prefix = (Get-Date).ToUniversalTime().ToString('yyyy.MM')
+            $numbers = @(foreach ($tag in git tag -l "v$prefix.*") {
+              if ($tag -match "^v$([regex]::Escape($prefix))\.(\d+)$") { [int]$Matches[1] }
+            })
+            $next = if ($numbers.Count -gt 0) { ($numbers | Measure-Object -Maximum).Maximum + 1 } else { 1 }
+            $version = "$prefix.$next"
+          }
+          Write-Host "catalog version $version"
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Install PSScriptAnalyzer
         shell: pwsh
@@ -53,20 +81,33 @@ jobs:
 
       - name: Build package
         shell: pwsh
-        run: ./tools/New-CatalogPackage.ps1 -CatalogVersion ${{ github.event.inputs.version }} -OutputDir build
+        run: ./tools/New-CatalogPackage.ps1 -CatalogVersion ${{ steps.version.outputs.version }} -OutputDir build
 
       - name: Create GitHub release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $version = '${{ github.event.inputs.version }}'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $version = '${{ steps.version.outputs.version }}'
           # Notes go through a file: the quotation marks in the text would end a command line string
           $notes = @"
           Katalog-Paket ${version}: Inhalt von catalog/ mit catalog.json und catalog.cat (SHA-256-Hashliste, noch nicht signiert).
 
           Der Remote Scanner von LOGINventory 9 lädt das Paket beim Öffnen des Skript-Katalogs selbst. Ohne Internetzugang des Dienstes lässt sich die Zip dort über die Schaltfläche „…" aus einer Datei importieren.
           "@
+          # Catalog files changed since the previous release; no previous release (gh exits 1) means no list
+          $previous = gh release view --repo ${{ github.repository }} --json tagName --jq .tagName 2>$null
+          if ($previous -and (git rev-parse --quiet --verify "refs/tags/$previous" 2>$null)) {
+            $kinds = @{ A = 'neu'; M = 'geändert'; D = 'entfernt'; R = 'umbenannt' }
+            $changes = @(foreach ($line in git diff --name-status "$previous..HEAD" -- catalog/) {
+              $parts = $line -split "`t"
+              $kind = $kinds[$parts[0].Substring(0, 1)]
+              if (-not $kind) { $kind = 'geändert' }
+              if ($parts.Count -gt 2) { "- $($parts[-1]) ($kind, vorher $($parts[1]))" } else { "- $($parts[1]) ($kind)" }
+            })
+            $notes += "`n`n" + $(if ($changes) { "Änderungen seit ${previous}:`n" + ($changes -join "`n") } else { "Keine Änderungen unter catalog/ seit $previous." })
+          }
           Set-Content -Path build/release-notes.md -Value $notes -Encoding utf8
           gh release create "v$version" "build/scripts-catalog-$version.zip" "build/catalog.json" `
             --repo ${{ github.repository }} `
