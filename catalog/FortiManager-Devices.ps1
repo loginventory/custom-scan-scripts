@@ -24,7 +24,8 @@
   },
   "parameters": [
     { "name": "fmgHost", "type": "string", "required": true,
-      "label": { "de": "FortiManager (Host oder URL)", "en": "FortiManager (host or URL)" } },
+      "label": { "de": "FortiManager (Host oder URL)", "en": "FortiManager (host or URL)" },
+      "help": { "de": "Hostname, IP-Adresse oder https-URL, z.B. https://10.0.0.5:8443. Nur https.", "en": "Host name, IP address or https URL, e.g. https://10.0.0.5:8443. https only." } },
     { "name": "apiKey", "type": "secret",
       "label": { "de": "API-Key", "en": "API key" },
       "help": { "de": "Empfohlen. Alternativ Benutzername und Passwort.", "en": "Recommended. Alternatively user name and password." } },
@@ -116,7 +117,7 @@ Voraussetzungen im FortiManager:
 Diese Parameter können Sie im RemoteScanner in der Skriptbasierten Inventarisierung unter Parameter hinterlegen:
 
 Pflicht:
-- fmgHost               Adresse des FortiManagers, z.B. "fortimanager.firma.local" oder "https://10.0.0.5:8443"
+- fmgHost               Adresse des FortiManagers, z.B. "fortimanager.firma.local" oder "https://10.0.0.5:8443" (nur https)
 - apiKey                API-Schlüssel des REST-API-Administrators (empfohlen; Passwort-Checkbox aktivieren)
   oder
 - username / password   Benutzername und Passwort eines Administrators mit JSON-API-Zugriff
@@ -181,8 +182,7 @@ $siteMetaField       = [string]$ctx.UserParameters['siteMetaField']
 $exportMetaFields    = Get-BoolParameter $ctx.UserParameters['exportMetaFields'] $false
 $skipCertCheck       = Get-BoolParameter $ctx.UserParameters['skipCertificateCheck'] $false
 $useWebProxy         = Get-BoolParameter $ctx.UserParameters['useWebProxy'] $false
-$proxyTimeoutValue   = $ctx.UserParameters['proxyTimeout']
-$proxyTimeout        = if (HasValue $proxyTimeoutValue) { [int]$proxyTimeoutValue } else { 60 }
+$proxyTimeoutValue   = [string]$ctx.UserParameters['proxyTimeout']
 $rawDumpDir          = [string]$ctx.UserParameters['rawDumpDir']
 $useSerialAsCustomId = Get-BoolParameter $ctx.UserParameters['useSerialAsCustomId'] $false
 $includeSwitchPorts  = Get-BoolParameter $ctx.UserParameters['includeSwitchPorts'] $true
@@ -208,9 +208,19 @@ if (-not (HasValue $apiKey) -and -not ((HasValue $username) -and (HasValue $pass
 if ($componentSource -notin @('proxy', 'fmg')) {
     throw "Invalid componentSource '$componentSource' (allowed: proxy, fmg)."
 }
+$proxyTimeout = 60
+if ((HasValue $proxyTimeoutValue) -and (-not [int]::TryParse($proxyTimeoutValue.Trim(), [ref]$proxyTimeout) -or $proxyTimeout -le 0)) {
+    Notify -name "Error" -itemName "Configuration" -message "Parameter proxyTimeout must be a positive number of seconds (value: '$proxyTimeoutValue')." -category "Error" -state "Faulty" -itemResult "Error"
+    throw "Parameter proxyTimeout must be a positive number of seconds (value: '$proxyTimeoutValue')."
+}
 
 $fmgBase = $fmgHost.Trim().TrimEnd('/')
 if ($fmgBase -notmatch '^\w+://') { $fmgBase = "https://$fmgBase" }
+# API key and password are sent with every request: never over an unencrypted connection.
+if ($fmgBase -notmatch '^https://') {
+    Notify -name "Error" -itemName "Configuration" -message "Parameter fmgHost must use https:// (value: '$fmgHost')." -category "Error" -state "Faulty" -itemResult "Error"
+    throw "Parameter fmgHost must use https:// (value: '$fmgHost')."
+}
 $rpcUrl = "$fmgBase/jsonrpc"
 
 # The LOGINventory web proxy is meant for internet access; a FortiManager is usually internal.
@@ -238,10 +248,6 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
     [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 }
 
-if (HasValue $rawDumpDir) {
-    if (-not (Test-Path $rawDumpDir)) { New-Item -Path $rawDumpDir -ItemType Directory -Force | Out-Null }
-}
-
 
 # ------------ HELPERS -----------------
 
@@ -250,10 +256,19 @@ $script:fmgSession = $null
 
 function Save-RawDump {
     # Writes an API response to rawDumpDir (only when the parameter is set).
+    # A failing dump must not stop the inventory: warn once and stop dumping.
     param([string]$Name, $Data)
-    if (-not (HasValue $rawDumpDir)) { return }
-    $file = Join-Path $rawDumpDir ((New-SafeFileName -Name $Name) + '.json')
-    ConvertTo-Json -InputObject $Data -Depth 30 | Out-File -FilePath $file -Encoding UTF8
+    if (-not (HasValue $rawDumpDir) -or $script:rawDumpFailed) { return }
+    try {
+        if (-not (Test-Path -LiteralPath $rawDumpDir)) { New-Item -Path $rawDumpDir -ItemType Directory -Force -ErrorAction Stop | Out-Null }
+        $file = Join-Path $rawDumpDir ((New-SafeFileName -Name $Name) + '.json')
+        ConvertTo-Json -InputObject $Data -Depth 30 | Out-File -FilePath $file -Encoding UTF8 -ErrorAction Stop
+    }
+    catch {
+        $script:rawDumpFailed = $true
+        $script:warnings++
+        Notify -name "Raw data" -itemName "rawDumpDir" -message "Could not write raw data to ${rawDumpDir}, no further raw data is written: $($_.Exception.Message)" -category "Warning" -state "Finished" -itemResult "Error"
+    }
 }
 
 function Invoke-FmgRpc {
@@ -448,10 +463,11 @@ function Get-SwitchDetailRows {
           MacAddressTableRaw.*  one per learned MAC address
         $Status  : entry of /monitor/switch-controller/managed-switch/status (ports, link state, speed)
         $Config  : entry of /cmdb/switch-controller/managed-switch (native/allowed/untagged VLANs, descriptions)
-        $VlanIds : hashtable VLAN interface name -> VLAN ID
+        $VlanIds : hashtable VLAN interface name -> VLAN ID (all VLAN interfaces of the FortiGate)
         $Macs    : normalized MAC entries of this switch (Mac, Port, Vlan)
+        $FortiLinkVlans : names of the VLANs on the FortiLink interface of this switch ("allowed-vlans-all")
     #>
-    param($Status, $Config, [hashtable]$VlanIds, $Macs, [bool]$WithPorts)
+    param($Status, $Config, [hashtable]$VlanIds, $Macs, [bool]$WithPorts, [string[]]$FortiLinkVlans)
 
     $rows = New-Object System.Collections.ArrayList
     $configPorts = @{}
@@ -498,7 +514,7 @@ function Get-SwitchDetailRows {
             if (-not $native) { $native = Get-Prop $sp @('vlan') }
             $untagged = @(@(Get-Prop $cp @('untagged-vlans')) | ForEach-Object { Get-Prop $_ @('vlan-name') } | Where-Object { $_ })
             $allowed  = @(@(Get-Prop $cp @('allowed-vlans'))  | ForEach-Object { Get-Prop $_ @('vlan-name') } | Where-Object { $_ })
-            if ((Get-Prop $cp @('allowed-vlans-all')) -eq 'enable') { $allowed += @($VlanIds.Keys) }
+            if ((Get-Prop $cp @('allowed-vlans-all')) -eq 'enable') { $allowed += @($FortiLinkVlans) }
             foreach ($v in @(@($native) + $untagged + $allowed | Where-Object { $_ } | Select-Object -Unique)) {
                 if (-not $vlanPorts.Contains($v)) { $vlanPorts[$v] = @{ Egress = New-Object System.Collections.ArrayList; Untagged = New-Object System.Collections.ArrayList } }
                 [void]$vlanPorts[$v].Egress.Add($num)
@@ -857,130 +873,145 @@ try {
 
                 Notify -name "Getting Data" -itemName "Getting Data" -itemResult "None" -message "[$i/$($byDevice.Count)] Querying switches and access points of $($gw.Name)" -category "Info" -state "Detecting"
 
-                if ($includeSwitches) {
-                    $res = Invoke-FgtMonitor -Adom $gw.Adom -Device $gw.Name -Resources @(
-                        '/api/v2/monitor/switch-controller/managed-switch/status?vdom=*',
-                        '/api/v2/monitor/switch-controller/managed-switch/status',
-                        '/api/v2/monitor/switch-controller/managed-switch?vdom=*'
-                    )
-                    if ($res.Ok -and $res.Results.Count -gt 0) {
+                try {
+                    if ($includeSwitches) {
+                        $res = Invoke-FgtMonitor -Adom $gw.Adom -Device $gw.Name -Resources @(
+                            '/api/v2/monitor/switch-controller/managed-switch/status?vdom=*',
+                            '/api/v2/monitor/switch-controller/managed-switch/status',
+                            '/api/v2/monitor/switch-controller/managed-switch?vdom=*'
+                        )
+                        if ($res.Ok -and $res.Results.Count -gt 0) {
 
-                        # Ports and VLANs: switch configuration and the VLAN IDs of the FortiLink VLAN interfaces
-                        $switchConfigs = @{}
-                        $vlanIds = @{}
-                        if ($includeSwitchPorts) {
-                            $cfg = Invoke-FgtMonitor -Adom $gw.Adom -Device $gw.Name -Resources @('/api/v2/cmdb/switch-controller/managed-switch')
-                            if ($cfg.Ok) {
-                                foreach ($c in $cfg.Results) {
-                                    foreach ($k in @((Get-Prop $c @('switch-id')), (Get-Prop $c @('sn')))) { if ($k) { $switchConfigs[[string]$k] = $c } }
+                            # Ports and VLANs: switch configuration and the VLAN IDs of the FortiLink VLAN interfaces
+                            $switchConfigs = @{}
+                            $vlanIds = @{}
+                            $vlanParents = @{}   # VLAN interface name -> parent interface (e.g. "fortilink")
+                            if ($includeSwitchPorts) {
+                                $cfg = Invoke-FgtMonitor -Adom $gw.Adom -Device $gw.Name -Resources @('/api/v2/cmdb/switch-controller/managed-switch')
+                                if ($cfg.Ok) {
+                                    foreach ($c in $cfg.Results) {
+                                        foreach ($k in @((Get-Prop $c @('switch-id')), (Get-Prop $c @('sn')))) { if ($k) { $switchConfigs[[string]$k] = $c } }
+                                    }
+                                }
+                                else {
+                                    $warnings++
+                                    Notify -name "Switch config $($gw.Name)" -itemName "FortiSwitch" -message "Could not read switch port configuration of $($gw.Name): $($cfg.Error)" -category "Warning" -state "Finished" -itemResult "Error"
                                 }
                             }
-                            else {
-                                $warnings++
-                                Notify -name "Switch config $($gw.Name)" -itemName "FortiSwitch" -message "Could not read switch port configuration of $($gw.Name): $($cfg.Error)" -category "Warning" -state "Finished" -itemResult "Error"
-                            }
-                        }
-                        if ($includeSwitchPorts -or $includeMacTable) {
-                            $ifs = Invoke-FgtMonitor -Adom $gw.Adom -Device $gw.Name -Resources @('/api/v2/cmdb/system/interface?format=name|vlanid|interface|type')
-                            if ($ifs.Ok) {
-                                foreach ($if in $ifs.Results) {
-                                    $vid = Get-Prop $if @('vlanid')
-                                    if ($vid -and [int]$vid -gt 0) { $vlanIds[[string]$if.name] = [int]$vid }
-                                }
-                            }
-                        }
-
-                        # MAC address table: devices learned on the switch ports
-                        $macsBySwitch = @{}
-                        if ($includeMacTable) {
-                            $det = Invoke-FgtMonitor -Adom $gw.Adom -Device $gw.Name -Resources @(
-                                '/api/v2/monitor/switch-controller/detected-device?vdom=*',
-                                '/api/v2/monitor/switch-controller/detected-device'
-                            )
-                            if ($det.Ok) {
-                                foreach ($d in $det.Results) {
-                                    $swKey = Get-Prop $d @('switch_id', 'switch-id', 'switch_serial', 'fsw_serial', 'switch', 'sn', 'serial')
-                                    if (-not $swKey) { continue }
-                                    if (-not $macsBySwitch.ContainsKey([string]$swKey)) { $macsBySwitch[[string]$swKey] = New-Object System.Collections.ArrayList }
-                                    [void]$macsBySwitch[[string]$swKey].Add([pscustomobject]@{
-                                        Mac  = Get-Prop $d @('mac', 'mac_address', 'mac-address')
-                                        Port = Get-Prop $d @('port_name', 'port', 'port-name', 'interface')
-                                        Vlan = Get-Prop $d @('vlan_id', 'vlan', 'vlan-id', 'vlanid', 'vlan_name')
-                                        PortId = Get-Prop $d @('port_id')
-                                    })
-                                }
-                            }
-                            else {
-                                $warnings++
-                                Notify -name "MAC table $($gw.Name)" -itemName "FortiSwitch" -message "Could not read MAC address table of $($gw.Name): $($det.Error)" -category "Warning" -state "Finished" -itemResult "Error"
-                            }
-                        }
-
-                        foreach ($s in $res.Results) {
-                            $serial = Get-Prop $s @('serial', 'switch-id', 'switch_id', 'sn')
-                            $swId   = Get-Prop $s @('switch-id', 'switch_id', 'name')
-                            $rows = $null
                             if ($includeSwitchPorts -or $includeMacTable) {
-                                $config = $switchConfigs[[string]$swId]
-                                if (-not $config) { $config = $switchConfigs[[string]$serial] }
-                                $macs = @()
-                                foreach ($k in @($swId, $serial)) { if ($k -and $macsBySwitch.ContainsKey([string]$k)) { $macs += @($macsBySwitch[[string]$k]) } }
-                                $rows = Get-SwitchDetailRows -Status $s -Config $config -VlanIds $vlanIds -Macs $macs -WithPorts $includeSwitchPorts
+                                $ifs = Invoke-FgtMonitor -Adom $gw.Adom -Device $gw.Name -Resources @('/api/v2/cmdb/system/interface?format=name|vlanid|interface|type')
+                                if ($ifs.Ok) {
+                                    foreach ($if in $ifs.Results) {
+                                        $vid = Get-Prop $if @('vlanid')
+                                        if ($vid -and [int]$vid -gt 0) {
+                                            $vlanIds[[string]$if.name] = [int]$vid
+                                            $vlanParents[[string]$if.name] = [string](Get-Prop $if @('interface'))
+                                        }
+                                    }
+                                }
                             }
-                            Add-Component ([pscustomobject]@{
-                                Rows      = $rows
-                                Kind      = 'Switch'
-                                Serial    = $serial
-                                Name      = Get-Prop $s @('name', 'switch-id', 'switch_id')
-                                OsVersion = Get-Prop $s @('os_version')
-                                Ip        = Get-Prop $s @('connecting_from')
-                                Mac       = $null
-                                Status    = Get-Prop $s @('status')
-                                State     = Get-Prop $s @('state')
-                                Platform  = $switchPlatforms[[string]$serial]
-                                Location  = $null
-                                Profile   = $null
-                                Interface = Get-Prop $s @('fgt_peer_intf_name')
-                                Gateway   = $gw
-                            })
+
+                            # MAC address table: devices learned on the switch ports
+                            $macsBySwitch = @{}
+                            if ($includeMacTable) {
+                                $det = Invoke-FgtMonitor -Adom $gw.Adom -Device $gw.Name -Resources @(
+                                    '/api/v2/monitor/switch-controller/detected-device?vdom=*',
+                                    '/api/v2/monitor/switch-controller/detected-device'
+                                )
+                                if ($det.Ok) {
+                                    foreach ($d in $det.Results) {
+                                        $swKey = Get-Prop $d @('switch_id', 'switch-id', 'switch_serial', 'fsw_serial', 'switch', 'sn', 'serial')
+                                        if (-not $swKey) { continue }
+                                        if (-not $macsBySwitch.ContainsKey([string]$swKey)) { $macsBySwitch[[string]$swKey] = New-Object System.Collections.ArrayList }
+                                        [void]$macsBySwitch[[string]$swKey].Add([pscustomobject]@{
+                                            Mac  = Get-Prop $d @('mac', 'mac_address', 'mac-address')
+                                            Port = Get-Prop $d @('port_name', 'port', 'port-name', 'interface')
+                                            Vlan = Get-Prop $d @('vlan_id', 'vlan', 'vlan-id', 'vlanid', 'vlan_name')
+                                            PortId = Get-Prop $d @('port_id')
+                                        })
+                                    }
+                                }
+                                else {
+                                    $warnings++
+                                    Notify -name "MAC table $($gw.Name)" -itemName "FortiSwitch" -message "Could not read MAC address table of $($gw.Name): $($det.Error)" -category "Warning" -state "Finished" -itemResult "Error"
+                                }
+                            }
+
+                            foreach ($s in $res.Results) {
+                                $serial = Get-Prop $s @('serial', 'switch-id', 'switch_id', 'sn')
+                                $swId   = Get-Prop $s @('switch-id', 'switch_id', 'name')
+                                $rows = $null
+                                if ($includeSwitchPorts -or $includeMacTable) {
+                                    $config = $switchConfigs[[string]$swId]
+                                    if (-not $config) { $config = $switchConfigs[[string]$serial] }
+                                    $macs = @()
+                                    foreach ($k in @($swId, $serial)) { if ($k -and $macsBySwitch.ContainsKey([string]$k)) { $macs += @($macsBySwitch[[string]$k]) } }
+                                    # "allowed-vlans-all" means the VLANs of the switch's FortiLink interface, not every VLAN of the FortiGate.
+                                    # If the FortiLink interface is unknown, all VLANs are taken.
+                                    $fortiLink = [string](Get-Prop $s @('fgt_peer_intf_name'))
+                                    $fortiLinkVlans = @($vlanIds.Keys | Where-Object { -not $fortiLink -or $vlanParents[$_] -eq $fortiLink })
+                                    $rows = Get-SwitchDetailRows -Status $s -Config $config -VlanIds $vlanIds -Macs $macs -WithPorts $includeSwitchPorts -FortiLinkVlans $fortiLinkVlans
+                                }
+                                Add-Component ([pscustomobject]@{
+                                    Rows      = $rows
+                                    Kind      = 'Switch'
+                                    Serial    = $serial
+                                    Name      = Get-Prop $s @('name', 'switch-id', 'switch_id')
+                                    OsVersion = Get-Prop $s @('os_version')
+                                    Ip        = Get-Prop $s @('connecting_from')
+                                    Mac       = $null
+                                    Status    = Get-Prop $s @('status')
+                                    State     = Get-Prop $s @('state')
+                                    Platform  = $switchPlatforms[[string]$serial]
+                                    Location  = $null
+                                    Profile   = $null
+                                    Interface = Get-Prop $s @('fgt_peer_intf_name')
+                                    Gateway   = $gw
+                                })
+                            }
+                        }
+                        elseif (-not $res.Ok) {
+                            $warnings++
+                            Notify -name "Switches $($gw.Name)" -itemName "FortiSwitch" -message "Could not query switches of $($gw.Name): $($res.Error)" -category "Warning" -state "Finished" -itemResult "Error"
                         }
                     }
-                    elseif (-not $res.Ok) {
-                        $warnings++
-                        Notify -name "Switches $($gw.Name)" -itemName "FortiSwitch" -message "Could not query switches of $($gw.Name): $($res.Error)" -category "Warning" -state "Finished" -itemResult "Error"
+
+                    if ($includeAccessPoints) {
+                        $res = Invoke-FgtMonitor -Adom $gw.Adom -Device $gw.Name -Resources @(
+                            '/api/v2/monitor/wifi/managed_ap?vdom=*',
+                            '/api/v2/monitor/wifi/managed_ap'
+                        )
+                        if ($res.Ok) {
+                            foreach ($a in $res.Results) {
+                                $ip = Get-Prop $a @('connecting_from', 'local_ipv4_addr')
+                                if ($ip -eq '0.0.0.0') { $ip = $null }
+                                Add-Component ([pscustomobject]@{
+                                    Kind      = 'AccessPoint'
+                                    Serial    = Get-Prop $a @('serial', 'wtp_id')
+                                    Name      = Get-Prop $a @('name', 'wtp_id')
+                                    OsVersion = Get-Prop $a @('os_version')
+                                    Ip        = $ip
+                                    Mac       = Get-Prop $a @('board_mac')
+                                    Status    = Get-Prop $a @('status', 'connection_state')
+                                    State     = Get-Prop $a @('state')
+                                    Platform  = $null
+                                    Location  = Get-Prop $a @('location')
+                                    Profile   = Get-Prop $a @('ap_profile')
+                                    Interface = Get-Prop $a @('connecting_interface')
+                                    Gateway   = $gw
+                                })
+                            }
+                        }
+                        else {
+                            $warnings++
+                            Notify -name "Access points $($gw.Name)" -itemName "FortiAP" -message "Could not query access points of $($gw.Name): $($res.Error)" -category "Warning" -state "Finished" -itemResult "Error"
+                        }
                     }
                 }
-
-                if ($includeAccessPoints) {
-                    $res = Invoke-FgtMonitor -Adom $gw.Adom -Device $gw.Name -Resources @(
-                        '/api/v2/monitor/wifi/managed_ap?vdom=*',
-                        '/api/v2/monitor/wifi/managed_ap'
-                    )
-                    if ($res.Ok) {
-                        foreach ($a in $res.Results) {
-                            $ip = Get-Prop $a @('connecting_from', 'local_ipv4_addr')
-                            if ($ip -eq '0.0.0.0') { $ip = $null }
-                            Add-Component ([pscustomobject]@{
-                                Kind      = 'AccessPoint'
-                                Serial    = Get-Prop $a @('serial', 'wtp_id')
-                                Name      = Get-Prop $a @('name', 'wtp_id')
-                                OsVersion = Get-Prop $a @('os_version')
-                                Ip        = $ip
-                                Mac       = Get-Prop $a @('board_mac')
-                                Status    = Get-Prop $a @('status', 'connection_state')
-                                State     = Get-Prop $a @('state')
-                                Platform  = $null
-                                Location  = Get-Prop $a @('location')
-                                Profile   = Get-Prop $a @('ap_profile')
-                                Interface = Get-Prop $a @('connecting_interface')
-                                Gateway   = $gw
-                            })
-                        }
-                    }
-                    else {
-                        $warnings++
-                        Notify -name "Access points $($gw.Name)" -itemName "FortiAP" -message "Could not query access points of $($gw.Name): $($res.Error)" -category "Warning" -state "Finished" -itemResult "Error"
-                    }
+                catch {
+                    # An unexpected error (e.g. an unknown answer format) costs only this FortiGate, the rest is still written.
+                    $warnings++
+                    Notify -name "Components $($gw.Name)" -itemName "FortiGate" -message "Could not process switches and access points of $($gw.Name): $($_.Exception.Message) - line $($_.InvocationInfo.ScriptLineNumber)" -category "Warning" -state "Finished" -itemResult "Error"
                 }
             }
 
@@ -1017,44 +1048,50 @@ try {
                         $d = $null
                         if ($item.data -is [string]) { try { $d = $item.data | ConvertFrom-Json } catch { $d = $null } } else { $d = $item.data }
 
-                        $serial = Get-Prop $item @('sn')
-                        if (-not $serial) { $serial = Get-Prop $d @('serial', 'wtp_id', 'switch-id', 'switch_id', 'sn') }
+                        try {
+                            $serial = Get-Prop $item @('sn')
+                            if (-not $serial) { $serial = Get-Prop $d @('serial', 'wtp_id', 'switch-id', 'switch_id', 'sn') }
 
-                        if ($kind -eq 'fsw') {
-                            Add-Component ([pscustomobject]@{
-                                Kind      = 'Switch'
-                                Serial    = $serial
-                                Name      = Get-Prop $d @('name', 'switch-id', 'switch_id')
-                                OsVersion = Get-Prop $d @('os_version', 'version')
-                                Ip        = Get-Prop $d @('connecting_from', 'ip')
-                                Mac       = $null
-                                Status    = Get-Prop $d @('status', 'connection_state')
-                                State     = Get-Prop $d @('state')
-                                Platform  = $switchPlatforms[[string]$serial]
-                                Location  = $null
-                                Profile   = $null
-                                Interface = Get-Prop $d @('fgt_peer_intf_name')
-                                Gateway   = $gw
-                            })
+                            if ($kind -eq 'fsw') {
+                                Add-Component ([pscustomobject]@{
+                                    Kind      = 'Switch'
+                                    Serial    = $serial
+                                    Name      = Get-Prop $d @('name', 'switch-id', 'switch_id')
+                                    OsVersion = Get-Prop $d @('os_version', 'version')
+                                    Ip        = Get-Prop $d @('connecting_from', 'ip')
+                                    Mac       = $null
+                                    Status    = Get-Prop $d @('status', 'connection_state')
+                                    State     = Get-Prop $d @('state')
+                                    Platform  = $switchPlatforms[[string]$serial]
+                                    Location  = $null
+                                    Profile   = $null
+                                    Interface = Get-Prop $d @('fgt_peer_intf_name')
+                                    Gateway   = $gw
+                                })
+                            }
+                            else {
+                                $ip = Get-Prop $d @('connecting_from', 'local_ip', 'local_ipv4_addr')
+                                if ($ip -eq '0.0.0.0') { $ip = $null }
+                                Add-Component ([pscustomobject]@{
+                                    Kind      = 'AccessPoint'
+                                    Serial    = $serial
+                                    Name      = Get-Prop $d @('name', 'wtp_id')
+                                    OsVersion = Get-Prop $d @('os_version')
+                                    Ip        = $ip
+                                    Mac       = Get-Prop $d @('board_mac')
+                                    Status    = Get-Prop $d @('connection_state', 'status')
+                                    State     = Get-Prop $d @('admin', 'state')
+                                    Platform  = $null
+                                    Location  = Get-Prop $d @('location')
+                                    Profile   = Get-Prop $d @('wtp_profile', 'ap_profile')
+                                    Interface = $null
+                                    Gateway   = $gw
+                                })
+                            }
                         }
-                        else {
-                            $ip = Get-Prop $d @('connecting_from', 'local_ip', 'local_ipv4_addr')
-                            if ($ip -eq '0.0.0.0') { $ip = $null }
-                            Add-Component ([pscustomobject]@{
-                                Kind      = 'AccessPoint'
-                                Serial    = $serial
-                                Name      = Get-Prop $d @('name', 'wtp_id')
-                                OsVersion = Get-Prop $d @('os_version')
-                                Ip        = $ip
-                                Mac       = Get-Prop $d @('board_mac')
-                                Status    = Get-Prop $d @('connection_state', 'status')
-                                State     = Get-Prop $d @('admin', 'state')
-                                Platform  = $null
-                                Location  = Get-Prop $d @('location')
-                                Profile   = Get-Prop $d @('wtp_profile', 'ap_profile')
-                                Interface = $null
-                                Gateway   = $gw
-                            })
+                        catch {
+                            $warnings++
+                            Notify -name "Status $kind $($item.dev)" -itemName $kind -message "Could not process controller status ($kind) of $($item.dev): $($_.Exception.Message) - line $($_.InvocationInfo.ScriptLineNumber)" -category "Warning" -state "Finished" -itemResult "Error"
                         }
                     }
                 }
