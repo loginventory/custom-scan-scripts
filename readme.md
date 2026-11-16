@@ -146,6 +146,17 @@ Ablauf: Skript mit Manifest nach `catalog/` legen, lokal `tools/Test-Catalog.ps1
 
 Der Katalog ist als Ganzes versioniert (`JJJJ.MM.n`), weil alle Skripte dasselbe `include` teilen. Ein Release erzeugt der Workflow [`.github/workflows/release.yml`](.github/workflows/release.yml), manuell gestartet; die Version kann man angeben oder leer lassen, dann nimmt der Workflow die nächste freie Nummer des laufenden Monats. Er prüft den Katalog, baut das Paket und hängt Zip und `catalog.json` an das GitHub-Release `v<Version>`, dessen Notizen die seit dem letzten Release geänderten Skripte auflisten. Das `catalog.json` des letzten Releases ist die Referenz für die Prüfung auf stabile Dateinamen.
 
+### Release erstellen
+
+Voraussetzung: Alle Änderungen sind per Pull Request auf `main` gemergt, die CI ist grün, und das eigene Konto hat Schreibrechte im Repo. Merges allein erzeugen kein Release; der Katalog wird nur auf Klick neu gebaut.
+
+1. Im Repo auf GitHub den Reiter **Actions** öffnen, links den Workflow **Release catalog package** wählen, rechts **Run workflow**.
+2. Branch `main` lassen. Das Feld **version** leer lassen, dann vergibt der Workflow die nächste freie Nummer des laufenden Monats (`JJJJ.MM.n`, nach `2026.11.1` also `2026.11.2`, im neuen Monat `.1`). Eine eigene Nummer nur, wenn sie von der Reihe abweichen soll; sie darf als Tag `v<Version>` noch nicht existieren.
+3. **Run workflow** bestätigen. Der Lauf prüft den Katalog wie die CI, baut das Paket und legt das Release `v<Version>` mit `scripts-catalog-<Version>.zip` und `catalog.json` an. Die Release-Notizen nennen die seit dem letzten Release geänderten Dateien unter `catalog/`.
+4. Unter **Releases** steht das neue Release als „Latest". Der Remote Scanner holt es beim nächsten Öffnen des Skript-Katalogs über `releases/latest/download/`.
+
+Schlägt der Lauf fehl, entsteht weder Release noch Tag; nach der Korrektur den Workflow erneut starten. Ein veröffentlichtes Release wird nicht überschrieben: Eine Korrektur bekommt die nächste Nummer.
+
 ## Skript Umgebung
 
 Die Datei [`catalog/include/common.ps1`](catalog/include/common.ps1) enthält Hilfsfunktionen. Sie wird über den Default Header eingebunden. Platzieren Sie diese Datei in `Agents\include`.
