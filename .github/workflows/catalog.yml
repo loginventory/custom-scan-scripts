@@ -45,7 +45,7 @@ jobs:
         shell: pwsh
         run: ./tools/Update-Readme.ps1 -Check
 
-      - name: Build package (unsigned, for inspection)
+      - name: Build package (for inspection)
         shell: pwsh
         run: ./tools/New-CatalogPackage.ps1 -CatalogVersion 0.0.0-dev -OutputDir build
 
