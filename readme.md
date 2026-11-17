@@ -142,9 +142,9 @@ Ablauf: Skript mit Manifest nach `catalog/` legen, lokal `tools/Test-Catalog.ps1
 
 ## Katalog-Paket
 
-`tools/New-CatalogPackage.ps1 -CatalogVersion JJJJ.MM.n` erzeugt `scripts-catalog-<Version>.zip`: der Inhalt von `catalog/` (also genau das Layout des `Agents`-Ordners), dazu `catalog.json` (Index mit allen Manifesten und SHA-256-Hashes, aus `tools/New-CatalogIndex.ps1`) und `catalog.cat` (Windows-Katalogdatei über alle Dateien, geprüft mit `Test-FileCatalog`). Der Remote Scanner importiert dieses Paket (Datei, Firmen-Share, später online) und prüft die Hashes; eine Signatur der `catalog.cat` kommt später auf dieselbe Struktur.
+Der Katalog ist als Ganzes versioniert (`JJJJ.MM.n`), weil alle Skripte dasselbe `include` teilen. LOGIN veröffentlicht ihn als Paket unter [Releases](https://github.com/loginventory/custom-scan-scripts/releases); ein gemergter Pull Request erscheint mit dem nächsten Release.
 
-Der Katalog ist als Ganzes versioniert (`JJJJ.MM.n`), weil alle Skripte dasselbe `include` teilen. Ein Release erzeugt der Workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) (manuell starten, Version angeben): Er prüft den Katalog, baut das Paket und hängt Zip und `catalog.json` an das GitHub-Release `v<Version>`. Das `catalog.json` des letzten Releases ist die Referenz für die Prüfung auf stabile Dateinamen.
+Zum Ansehen baut `tools/New-CatalogPackage.ps1 -CatalogVersion 0.0.0-dev` dasselbe Paket lokal nach `build/`: der Inhalt von `catalog/`, dazu `catalog.json` (Index mit allen Manifesten und SHA-256-Hashes) und `catalog.cat` (Windows-Katalogdatei über alle Dateien).
 
 ## Skript Umgebung
 

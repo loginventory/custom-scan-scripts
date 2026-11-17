@@ -3,10 +3,9 @@
     Builds the catalog package: scripts-catalog-<version>.zip with the content of catalog/,
     catalog.json and catalog.cat.
 .DESCRIPTION
-    The package is what the Remote Scanner imports (from a file, a company share, later online).
-    Its layout is the Agents folder itself, plus catalog.json (the index with all manifests and
-    SHA-256 hashes) and catalog.cat (a Windows catalog file over every file, verified with
-    Test-FileCatalog; the release pipeline will sign it later). Test-FileCatalog checks the
+    The package is the catalog as LOGINventory's Remote Scanner offers it. Its layout is the
+    Agents folder itself, plus catalog.json (the index with all manifests and SHA-256 hashes)
+    and catalog.cat (a Windows catalog file over every file). Test-FileCatalog checks the
     staging folder before the zip is written.
 .PARAMETER CatalogVersion
     Version of the catalog as a whole: YYYY.MM.n for releases (e.g. 2026.11.1), 0.0.0-dev locally.
