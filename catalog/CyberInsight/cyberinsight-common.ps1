@@ -693,6 +693,8 @@ function Close-CIInv {
     .SYNOPSIS
         Finishes a writer from Open-CIInv. Renames <file>.tmp to <file> so the LOGINventory data service
         never sees partial files; with -Abort the .tmp file is deleted instead.
+        An existing <file> is never replaced: Move-InvFile picks the next free name and Handle.Path is
+        updated to the name actually used.
     #>
     param(
         [Parameter(Mandatory=$true)]$Handle,
@@ -713,7 +715,8 @@ function Close-CIInv {
         Remove-Item -LiteralPath $Handle.Tmp -Force -ErrorAction SilentlyContinue
         return
     }
-    try { Move-Item -LiteralPath $Handle.Tmp -Destination $Handle.Path -Force -ErrorAction Stop }
+    # Never replaces an existing .inv file; on a name collision Handle.Path becomes the name actually used
+    try { $Handle.Path = Move-InvFile -TempPath $Handle.Tmp -FilePath $Handle.Path }
     catch { Remove-Item -LiteralPath $Handle.Tmp -Force -ErrorAction SilentlyContinue; throw }
 }
 
@@ -729,7 +732,7 @@ function New-CIWorkerPool {
 
     $names = 'HasValue','Join-Url','Write-CommonDebug','ConvertTo-NormalizedUrl','ConvertTo-GzipBytes',
              'Invoke-LoginWebRequest','Get-HttpErrorBody','Get-CIAccessToken','Invoke-CIApi',
-             'Get-ApiValidationErrorMessage','Invoke-CIApiRetry','ConvertTo-CIXmlText','Open-CIInv','Close-CIInv'
+             'Get-ApiValidationErrorMessage','Invoke-CIApiRetry','ConvertTo-CIXmlText','Open-CIInv','Close-CIInv','Move-InvFile'
 
     $iss = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
     foreach ($n in $names) {

@@ -23,6 +23,8 @@
         (a long streak of consecutive failures aborts the run)
       * .inv files are streamed with XmlWriter (no entity list / string / XmlDocument copies in memory)
         and written to <name>.tmp first, then renamed
+      * File names are unique per run (software id / running device number); an existing .inv file is
+        never replaced, a taken name gets a numeric suffix instead (Move-InvFile)
       * Software without matching vulnerabilities does not trigger a device request
       * Device mapping keeps only references to interned vulnerability ids (a few bytes per pair)
       * Standardized Notify() messages for external log collectors
@@ -218,6 +220,7 @@ function Start-CyberInsightGet {
                 $result.DeviceCount = $devMap.Count
 
                 Close-CIInv -Handle $inv
+                $result.File = $inv.Path   # differs from $FilePath only if that name was already taken
                 $inv = $null
                 $result.Ok = $true
             }
@@ -473,7 +476,8 @@ function Start-CyberInsightGet {
             $entries   = $deviceMap[$device]
             $timestamp = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
             $safeDev   = New-SafeFileName $device
-            $fileName  = "{0}_ci_{1}.inv" -f $timestamp, $safeDev
+            # Running number: different device keys can end up as the same safe file name (e.g. "a/b" and "a_b")
+            $fileName  = "{0}_ci_{1}_{2}.inv" -f $timestamp, $safeDev, ($devicesWritten + 1)
             $filePath  = Join-Path $ctx.Common.DataDir $fileName
 
             $inv = Open-CIInv -FilePath $filePath -Version $ctx.Common.Version -Entity 'Device'
@@ -490,6 +494,7 @@ function Start-CyberInsightGet {
                     }
                 }
                 Close-CIInv -Handle $inv
+                $filePath = $inv.Path   # the name actually used
             }
             catch {
                 try { Close-CIInv -Handle $inv -Abort } catch {}

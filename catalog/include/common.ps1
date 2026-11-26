@@ -5,7 +5,7 @@
 
     Contents (selected):
       - Encode / Decode / EnsureEncodedParameters / Init
-      - Inventory entity helpers: NewEntity, AddPropertyValue, WriteInv, ConvertTo-Xml, PostProcessXml
+      - Inventory entity helpers: NewEntity, AddPropertyValue, WriteInv, Move-InvFile, ConvertTo-Xml, PostProcessXml
       - Config helpers: Get-LoginventoryConfigPath, Get-LoginventoryConfigSettings,
                         Merge-ParameterScopes, Get-EffectiveValue, Resolve-CommonEffectiveConfig,
                         New-CommonContext
@@ -500,13 +500,57 @@ function WriteInv {
     $tmpFilePath = "$filePath.tmp"
     try {
         $mxl | Out-File -FilePath $tmpFilePath
-        Move-Item -LiteralPath $tmpFilePath -Destination $filePath -Force -ErrorAction Stop
+        # Never replaces an existing .inv file; on a name collision the file gets the next free name (<name>_2.inv, ...)
+        $finalPath = Move-InvFile -TempPath $tmpFilePath -FilePath $filePath
+        if ($finalPath -ne $filePath) { Write-Verbose ("WriteInv: {0} already exists, written to {1}" -f $filePath, $finalPath) }
     }
     catch {
         Remove-Item -LiteralPath $tmpFilePath -Force -ErrorAction SilentlyContinue
         throw
     }
     $lEntities.Clear() | Out-Null
+}
+
+function Move-InvFile {
+    <#
+    .SYNOPSIS
+        Renames a completely written temp file to its final .inv name without ever replacing an existing file.
+    .DESCRIPTION
+        The rename is a plain File.Move: atomic and failing if the target name is taken. An existing target is
+        never deleted or overwritten - it may not have been imported yet, and the LOGINventory data service may
+        have it open right now (Move-Item -Force fails then with "Cannot create a file when that file already
+        exists" and otherwise silently drops the older file).
+        If the target name is taken, the next free name is used: <name>_2.inv, <name>_3.inv, ...
+    .OUTPUTS
+        String: the path the file was actually written to.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$TempPath,
+        [Parameter(Mandatory = $true)][string]$FilePath,
+        [int]$MaxAttempts = 1000
+    )
+
+    $dir  = [System.IO.Path]::GetDirectoryName($FilePath)
+    $base = [System.IO.Path]::GetFileNameWithoutExtension($FilePath)
+    $ext  = [System.IO.Path]::GetExtension($FilePath)
+
+    $target = $FilePath
+    for ($n = 2; ; $n++) {
+        try {
+            [System.IO.File]::Move($TempPath, $target)
+            return $target
+        }
+        catch {
+            # .NET method exceptions arrive wrapped; find the IOException and its Win32 error code
+            $ex = $_.Exception
+            while ($null -ne $ex -and -not ($ex -is [System.IO.IOException])) { $ex = $ex.InnerException }
+            $code = if ($null -ne $ex) { $ex.HResult -band 0xFFFF } else { 0 }
+            # 183 = ERROR_ALREADY_EXISTS, 80 = ERROR_FILE_EXISTS; everything else is a real error
+            if (($code -ne 183 -and $code -ne 80) -or $n -gt $MaxAttempts) { throw }
+        }
+        $target = [System.IO.Path]::Combine($dir, ("{0}_{1}{2}" -f $base, $n, $ext))
+    }
 }
 
 function Merge-ParameterScopes {
