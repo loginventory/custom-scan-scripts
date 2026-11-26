@@ -2,7 +2,7 @@
 {
   "schema": 1,
   "id": "cyberinsight",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "tier": "login",
   "maintainer": "Schmidt's LOGIN GmbH",
   "title": { "de": "Cyber Insight Schwachstellenanalyse", "en": "Cyber Insight vulnerability assessment" },
